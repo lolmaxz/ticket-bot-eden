@@ -1,0 +1,312 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// Ticket Management
+model Ticket {
+  id            String   @id @default(uuid())
+  discordId     String   @unique // Discord thread/channel ID
+  guildId       String
+  type          TicketType
+  status        TicketStatus
+  title         String
+
+  // Participants
+  creatorId     String   // Discord user ID who created ticket
+  memberId      String?  // Discord user ID of member involved (for staff-talk)
+  assignedStaffId String? // Discord user ID of assigned staff
+
+  // Metadata
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  closedAt      DateTime?
+  closedBy      String?  // Discord user ID
+  closeReason   String?
+
+  // Relations
+  messages      TicketMessage[]
+  logs          TicketLog[]
+  assignments   TicketAssignment[]
+  verification  VerificationTicket?
+  eventReport   EventReportTicket?
+  staffTalk     StaffTalkTicket?
+
+  @@index([guildId, status])
+  @@index([assignedStaffId])
+  @@index([memberId])
+}
+
+enum TicketType {
+  VERIFICATION_ID      // Only ID verification uses tickets
+  STAFF_TALK
+  EVENT_REPORT
+  UNSOLICITED_DM
+  FRIEND_REQUEST
+  DRAMA
+  OTHER
+  // Note: VRChat verification is handled by Hephia Bot automatically, no ticket needed
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  AWAITING_RESPONSE
+  CLOSED
+  ARCHIVED
+}
+
+// Ticket Messages (for history/transcript)
+model TicketMessage {
+  id          String   @id @default(uuid())
+  ticketId    String
+  messageId   String   @unique // Discord message ID
+  authorId    String   // Discord user ID
+  content     String   @db.Text
+  attachments Json     @default("[]") // Array of attachment URLs stored as JSON
+  createdAt   DateTime
+
+  ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([authorId])
+}
+
+// Ticket Activity Log
+model TicketLog {
+  id          String   @id @default(uuid())
+  ticketId    String
+  action      String   // "created", "assigned", "closed", "renamed", "user_added", "user_removed"
+  staffId     String   // Discord user ID who performed action
+  details     Json?    // Additional action details
+  createdAt   DateTime @default(now())
+
+  ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([staffId])
+}
+
+// Staff Assignments (tracking who's working on what)
+model TicketAssignment {
+  id          String   @id @default(uuid())
+  ticketId    String
+  staffId     String   // Discord user ID
+  assignedAt  DateTime @default(now())
+  unassignedAt DateTime?
+
+  ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([staffId])
+}
+
+// Member Records (for GitHub-style tracking)
+model MemberRecord {
+  id          String   @id @default(uuid())
+  discordId   String   @unique
+  discordTag  String
+
+  // Relations
+  warnings    Warning[]
+  moderationActions ModerationAction[]
+  // Note: Tickets reference memberId directly, not through relation
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Warnings/Punishments (for GitHub records integration)
+model Warning {
+  id          String   @id @default(uuid())
+  memberId    String
+  ticketId    String?  // Link to related ticket
+
+  // Warning type
+  type        WarningType
+
+  // Warning details
+  when        DateTime
+  why         String   // Rule broken / reason
+  result      String   // "Warning issued", "Timeout Xh", "Ban vote opened", etc.
+  loggedBy    String   // Discord user ID of staff who logged
+
+  // Evidence
+  evidenceUrls Json     @default("[]") // Screenshot/evidence links stored as JSON
+
+  // Status
+  isActive    Boolean  @default(true) // Active for 1 week (for warnings)
+  activeUntil DateTime?
+
+  // Additional notes
+  notes       String?  @db.Text // Additional context or notes
+
+  // Relations
+  member      MemberRecord @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  moderationAction ModerationAction?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([memberId])
+  @@index([isActive])
+  @@index([type])
+  @@index([when])
+}
+
+enum WarningType {
+  WARNING          // Formal warning
+  INFORMAL_WARNING // Informal warning
+  WATCHLIST        // Added to watchlist
+  BANNED           // Member was banned
+}
+
+// Moderation Actions Log (tracks all moderation actions taken by staff)
+model ModerationAction {
+  id          String   @id @default(uuid())
+  memberId    String   // Discord user ID of member action was taken on
+  staffId     String   // Discord user ID of staff who took action
+  ticketId    String?  // Link to related ticket (if applicable)
+  warningId   String?  @unique // Link to warning record (if applicable)
+
+  // Action details
+  actionType  ModerationActionType
+  when        DateTime // When the action occurred
+  reason      String   // Reason for the action
+  duration    String?  // Duration (for timeouts, temp bans, etc.)
+
+  // Additional details
+  channelId   String?  // Channel where action occurred
+  messageId   String?  // Message that triggered action (if applicable)
+  evidenceUrls Json     @default("[]") // Screenshot/evidence links stored as JSON
+
+  // Status
+  isActive    Boolean  @default(true) // For temporary actions
+  expiresAt   DateTime? // When temporary action expires
+
+  // Notes
+  notes       String?  @db.Text // Additional notes or context
+
+  // Relations
+  member      MemberRecord @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  warning     Warning? @relation(fields: [warningId], references: [id], onDelete: SetNull)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([memberId])
+  @@index([staffId])
+  @@index([actionType])
+  @@index([when])
+  @@index([isActive])
+  @@index([ticketId])
+}
+
+enum ModerationActionType {
+  WARNING_ISSUED
+  INFORMAL_WARNING_ISSUED
+  TIMEOUT
+  KICK
+  BAN
+  UNBAN
+  WATCHLIST_ADDED
+  WATCHLIST_REMOVED
+  MESSAGE_DELETED
+  ROLE_ADDED
+  ROLE_REMOVED
+  VERIFICATION_REVOKED
+  VERIFICATION_GRANTED
+  OTHER
+}
+
+// Mod on Call Rotation
+model ModOnCall {
+  id          String   @id @default(uuid())
+  staffId     String   // Discord user ID
+  weekStart   DateTime // Friday when rotation started
+  weekEnd     DateTime // Next Friday
+  isActive    Boolean  @default(true)
+
+  // Stats
+  ticketsClosed Int    @default(0)
+  recordsLogged  Int    @default(0)
+
+  createdAt   DateTime @default(now())
+
+  @@index([isActive])
+  @@index([weekStart])
+}
+
+// Verification-specific data (ID verification only)
+// Note: VRChat verification is handled by Hephia Bot, not tracked in tickets
+model VerificationTicket {
+  id          String   @id @default(uuid())
+  ticketId    String   @unique
+  verificationType String @default("ID") // Only "ID" - VRChat handled by Hephia
+
+  // Verification steps
+  initialVerifierId String? // Cutie Helper or Moderator who did initial
+  finalVerifierId   String? // Moderator who closed (must be different)
+
+  // Status tracking
+  idReceivedAt      DateTime?
+  initialVerifiedAt DateTime?
+  finalVerifiedAt   DateTime?
+
+  // Reminders
+  reminderCount     Int      @default(0)
+  lastReminderAt    DateTime?
+
+  ticket            Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+}
+
+// Event Report-specific data
+model EventReportTicket {
+  id          String   @id @default(uuid())
+  ticketId    String   @unique
+
+  // Event details
+  eventName   String?
+  eventDate   DateTime?
+  eventHostId String?  // Discord user ID of event host
+
+  // Report details
+  reportedUserId String? // Discord user ID of reported member
+  incidentType   String? // Type of incident
+
+  ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([eventHostId])
+  @@index([reportedUserId])
+}
+
+// Staff-Talk specific metadata (for tracking purpose)
+model StaffTalkTicket {
+  id          String   @id @default(uuid())
+  ticketId    String   @unique
+
+  // Purpose tracking
+  purpose     String?  // "investigation", "warning", "punishment", "staff_applicant", "member_report", etc.
+  isPunishmentTicket Boolean @default(false) // True if opened by staff for punishment
+
+  // Related member (if applicable)
+  targetMemberId String? // Discord user ID of member being investigated/warned
+
+  ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([targetMemberId])
+  @@index([isPunishmentTicket])
+}
+
+

@@ -1,0 +1,100 @@
+version: "3.8"
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: ticket-bot-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-ticketbot}
+      MYSQL_USER: ${MYSQL_USER:-ticketbot}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-ticketbotpassword}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - ticket-bot-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: ticket-bot-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: mysql://${MYSQL_USER:-ticketbot}:${MYSQL_PASSWORD:-ticketbotpassword}@mysql:3306/${MYSQL_DATABASE:-ticketbot}
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    volumes:
+      - api_data:/app/data
+      - ./shared:/app/shared
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - ticket-bot-network
+
+  bot:
+    build:
+      context: .
+      dockerfile: bot/Dockerfile
+    container_name: ticket-bot-discord
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      API_URL: http://api:3000
+      DATABASE_URL: mysql://${MYSQL_USER:-ticketbot}:${MYSQL_PASSWORD:-ticketbotpassword}@mysql:3306/${MYSQL_DATABASE:-ticketbot}
+    volumes:
+      - bot_data:/app/data
+      - ./shared:/app/shared
+    depends_on:
+      - mysql
+      - api
+    networks:
+      - ticket-bot-network
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    container_name: ticket-bot-dashboard
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: http://localhost:3000
+      API_URL: http://api:3000
+      SKIP_AUTH: ${SKIP_AUTH:-false}
+      NEXT_PUBLIC_SKIP_AUTH: ${SKIP_AUTH:-false}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-dev-secret-key-change-in-production}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3001}
+    ports:
+      - "3001:3000"
+    volumes:
+      - dashboard_data:/app/data
+      - ./shared:/app/shared
+    depends_on:
+      - api
+    networks:
+      - ticket-bot-network
+
+volumes:
+  mysql_data:
+  api_data:
+  bot_data:
+  dashboard_data:
+
+networks:
+  ticket-bot-network:
+    driver: bridge
