@@ -4,10 +4,13 @@ import { useParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import Link from 'next/link';
+import { useDateFormat } from '@/lib/use-date-format';
+import { CopyIdButton } from '@/components/common/CopyIdButton';
 
 export default function TicketDetailPage(): JSX.Element {
   const params = useParams();
   const ticketId = params.id as string;
+  const [dateFormat, , formatDate, getAbsoluteDate] = useDateFormat();
 
   const { data: ticket, isLoading, error } = useQuery({
     queryKey: ['ticket', ticketId],
@@ -41,15 +44,43 @@ export default function TicketDetailPage(): JSX.Element {
     );
   }
 
+  const getTicketTypeColor = (type: string): string => {
+    switch (type) {
+      case 'VERIFICATION_ID':
+        return 'bg-blue-100 text-blue-800';
+      case 'STAFF_TALK':
+        return 'bg-purple-100 text-purple-800';
+      case 'EVENT_REPORT':
+        return 'bg-orange-100 text-orange-800';
+      case 'UNSOLICITED_DM':
+        return 'bg-red-100 text-red-800';
+      case 'FRIEND_REQUEST':
+        return 'bg-pink-100 text-pink-800';
+      case 'DRAMA':
+        return 'bg-yellow-100 text-yellow-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
   return (
-    <div className="flex-1 space-y-6 p-6">
+    <div className="flex-1 space-y-4 p-4 lg:space-y-6 lg:p-6">
+      {/* Mobile: Ticket Type Banner */}
+      <div className="lg:hidden">
+        <div className={`w-full rounded-t-lg px-4 py-2 text-center text-sm font-semibold ${getTicketTypeColor(ticket.type)}`}>
+          {ticket.type.replace('_', ' ')}
+        </div>
+      </div>
+
       <div className="flex items-center justify-between">
         <div>
-          <Link href="/tickets" className="text-sm text-blue-600 hover:text-blue-800">
+          <Link href="/dashboard/tickets" className="text-sm text-blue-600 hover:text-blue-800">
             ← Back to Tickets
           </Link>
-          <h1 className="mt-2 text-3xl font-bold text-gray-900">{ticket.title}</h1>
-          <p className="mt-1 text-sm text-gray-600">Ticket ID: {ticket.id}</p>
+          <h1 className="mt-2 text-2xl font-bold text-gray-900 lg:text-3xl">{ticket.title}</h1>
+          <p className="mt-1 text-sm text-gray-600">
+            Ticket {ticket.ticketNumber ? `#${ticket.ticketNumber}` : `#${ticket.id.slice(0, 8)}`}
+          </p>
         </div>
         <div className="flex space-x-2">
           <span
@@ -71,7 +102,8 @@ export default function TicketDetailPage(): JSX.Element {
           <div className="rounded-lg bg-white p-6 shadow">
             <h2 className="mb-4 text-lg font-semibold text-gray-900">Details</h2>
             <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
+              {/* Desktop: Show type, Mobile: Hidden (shown in banner) */}
+              <div className="hidden lg:block">
                 <dt className="text-sm font-medium text-gray-500">Type</dt>
                 <dd className="mt-1 text-sm text-gray-900">{ticket.type.replace('_', ' ')}</dd>
               </div>
@@ -80,25 +112,71 @@ export default function TicketDetailPage(): JSX.Element {
                 <dd className="mt-1 text-sm text-gray-900">{ticket.status}</dd>
               </div>
               <div>
-                <dt className="text-sm font-medium text-gray-500">Creator</dt>
-                <dd className="mt-1 text-sm font-mono text-gray-900">{ticket.creatorId}</dd>
-              </div>
-              <div>
-                <dt className="text-sm font-medium text-gray-500">Assigned Staff</dt>
-                <dd className="mt-1 text-sm font-mono text-gray-900">
-                  {ticket.assignedStaffId || 'Unassigned'}
+                <dt className="text-sm font-medium text-gray-500">Opened By</dt>
+                <dd className="mt-1 flex items-center gap-1.5 text-sm text-gray-900">
+                  <span>{(ticket as { creatorUsername?: string }).creatorUsername || ticket.creatorId}</span>
+                  <CopyIdButton id={ticket.creatorId} />
                 </dd>
               </div>
               <div>
-                <dt className="text-sm font-medium text-gray-500">Created</dt>
-                <dd className="mt-1 text-sm text-gray-900">
-                  {new Date(ticket.createdAt).toLocaleString()}
+                <dt className="text-sm font-medium text-gray-500">Assigned Staff</dt>
+                <dd className="mt-1 flex items-center gap-1.5 text-sm text-gray-900">
+                  {ticket.assignedStaffId ? (
+                    <>
+                      <span>{(ticket as { assignedStaffUsername?: string | null }).assignedStaffUsername || ticket.assignedStaffId}</span>
+                      <CopyIdButton id={ticket.assignedStaffId} />
+                    </>
+                  ) : (
+                    <span className="text-gray-500 italic">Unassigned</span>
+                  )}
+                </dd>
+              </div>
+              {ticket.closedBy && (
+                <>
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">Closed By</dt>
+                    <dd className="mt-1 flex items-center gap-1.5 text-sm text-gray-900">
+                      <span>{(ticket as { closedByUsername?: string | null }).closedByUsername || ticket.closedBy}</span>
+                      <CopyIdButton id={ticket.closedBy} />
+                    </dd>
+                  </div>
+                  {ticket.closedAt && (
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">Closed At</dt>
+                      <dd 
+                        className="mt-1 text-sm text-gray-900"
+                        title={dateFormat === 'relative' ? getAbsoluteDate(ticket.closedAt) : undefined}
+                      >
+                        {formatDate(ticket.closedAt)}
+                      </dd>
+                    </div>
+                  )}
+                  {ticket.closeReason && (
+                    <div className="sm:col-span-2">
+                      <dt className="text-sm font-medium text-gray-500">Closing Reason</dt>
+                      <dd className="mt-1 text-sm text-gray-900">{ticket.closeReason}</dd>
+                    </div>
+                  )}
+                </>
+              )}
+              <div>
+                <dt className="text-sm font-medium text-gray-500">
+                  {dateFormat === 'relative' ? 'Created Since' : 'Created'}
+                </dt>
+                <dd 
+                  className="mt-1 text-sm text-gray-900"
+                  title={dateFormat === 'relative' ? getAbsoluteDate(ticket.createdAt) : undefined}
+                >
+                  {formatDate(ticket.createdAt)}
                 </dd>
               </div>
               <div>
                 <dt className="text-sm font-medium text-gray-500">Last Updated</dt>
-                <dd className="mt-1 text-sm text-gray-900">
-                  {new Date(ticket.updatedAt).toLocaleString()}
+                <dd 
+                  className="mt-1 text-sm text-gray-900"
+                  title={dateFormat === 'relative' ? getAbsoluteDate(ticket.updatedAt) : undefined}
+                >
+                  {formatDate(ticket.updatedAt)}
                 </dd>
               </div>
             </dl>

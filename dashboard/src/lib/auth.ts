@@ -4,6 +4,14 @@ import DiscordProvider from "next-auth/providers/discord";
 // Development flag to bypass authentication
 const SKIP_AUTH = process.env.SKIP_AUTH === "true";
 
+// Validate Discord OAuth credentials
+const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID;
+const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
+
+if (!SKIP_AUTH && (!DISCORD_CLIENT_ID || !DISCORD_CLIENT_SECRET)) {
+  console.error("❌ Discord OAuth credentials are missing! Please set DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET in your .env file.");
+}
+
 // Mock credentials provider for development
 const mockProvider = {
   id: "mock",
@@ -24,8 +32,8 @@ export const authOptions: NextAuthOptions = {
     ? [mockProvider as never]
     : [
         DiscordProvider({
-          clientId: process.env.DISCORD_CLIENT_ID || "",
-          clientSecret: process.env.DISCORD_CLIENT_SECRET || "",
+          clientId: DISCORD_CLIENT_ID || "",
+          clientSecret: DISCORD_CLIENT_SECRET || "",
           authorization: {
             params: {
               scope: "identify email guilds",

@@ -7,7 +7,7 @@ import { ApplicationCommandType, ApplicationIntegrationType, InteractionContextT
 })
 export class UserCommand extends Command {
 	// Register Chat Input and Context Menu command
-	public override registerApplicationCommands(registry: Command.Registry): void {
+	public override registerApplicationCommands(registry: Command.Registry) {
 		// Create shared integration types and contexts
 		// These allow the command to be used in guilds and DMs
 		const integrationTypes: ApplicationIntegrationType[] = [ApplicationIntegrationType.GuildInstall, ApplicationIntegrationType.UserInstall];
@@ -43,21 +43,21 @@ export class UserCommand extends Command {
 	}
 
 	// Message command
-	public override async messageRun(message: Message): Promise<void> {
-		await this.sendPing(message);
+	public override async messageRun(message: Message) {
+		return this.sendPing(message);
 	}
 
 	// Chat Input (slash) command
-	public override async chatInputRun(interaction: Command.ChatInputCommandInteraction): Promise<void> {
-		await this.sendPing(interaction);
+	public override async chatInputRun(interaction: Command.ChatInputCommandInteraction) {
+		return this.sendPing(interaction);
 	}
 
 	// Context Menu command
-	public override async contextMenuRun(interaction: Command.ContextMenuCommandInteraction): Promise<void> {
-		await this.sendPing(interaction);
+	public override async contextMenuRun(interaction: Command.ContextMenuCommandInteraction) {
+		return this.sendPing(interaction);
 	}
 
-	private async sendPing(interactionOrMessage: Message | Command.ChatInputCommandInteraction | Command.ContextMenuCommandInteraction): Promise<Message | void> {
+	private async sendPing(interactionOrMessage: Message | Command.ChatInputCommandInteraction | Command.ContextMenuCommandInteraction) {
 		const pingMessage =
 			interactionOrMessage instanceof Message
 				? interactionOrMessage.channel?.isSendable() && (await interactionOrMessage.channel.send({ content: 'Ping?' }))
@@ -78,5 +78,3 @@ export class UserCommand extends Command {
 		});
 	}
 }
-
-

@@ -40,8 +40,10 @@ export default async function ticketRoutes(fastify: FastifyInstance): Promise<vo
   fastify.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const query = request.query as {
-        status?: string;
-        type?: string;
+        status?: string | string[];
+        type?: string | string[];
+        'type[]'?: string | string[];
+        'status[]'?: string | string[];
         assignedStaffId?: string;
         creatorId?: string;
         memberId?: string;
@@ -50,13 +52,39 @@ export default async function ticketRoutes(fastify: FastifyInstance): Promise<vo
         offset?: string;
       };
 
+      // Debug logging (can be removed in production)
+      // fastify.log.info({ query }, 'Query received');
+
       const where: Record<string, unknown> = {};
 
-      if (query.status) {
-        where.status = query.status;
+      // Handle status filter - check both 'status' and 'status[]'
+      // Fastify may parse repeated params as arrays or as 'status[]' key
+      const statusValue = query['status[]'] || query.status;
+      if (statusValue) {
+        // Support both single value and array
+        if (Array.isArray(statusValue)) {
+          where.status = { in: statusValue };
+        } else if (typeof statusValue === 'string' && statusValue.includes(',')) {
+          // Handle comma-separated values
+          where.status = { in: statusValue.split(',').map((s) => s.trim()) };
+        } else {
+          where.status = statusValue;
+        }
       }
-      if (query.type) {
-        where.type = query.type;
+
+      // Handle type filter - check both 'type' and 'type[]'
+      // Fastify may parse repeated params as arrays or as 'type[]' key
+      const typeValue = query['type[]'] || query.type;
+      if (typeValue) {
+        // Support both single value and array
+        if (Array.isArray(typeValue)) {
+          where.type = { in: typeValue };
+        } else if (typeof typeValue === 'string' && typeValue.includes(',')) {
+          // Handle comma-separated values
+          where.type = { in: typeValue.split(',').map((t) => t.trim()) };
+        } else {
+          where.type = typeValue;
+        }
       }
       if (query.assignedStaffId) {
         where.assignedStaffId = query.assignedStaffId;
@@ -73,6 +101,9 @@ export default async function ticketRoutes(fastify: FastifyInstance): Promise<vo
 
       const limit = query.limit ? parseInt(query.limit, 10) : 50;
       const offset = query.offset ? parseInt(query.offset, 10) : 0;
+
+      // Debug logging (can be removed in production)
+      // fastify.log.info({ where }, 'Where clause');
 
       const [tickets, total] = await Promise.all([
         prisma.ticket.findMany({
@@ -94,8 +125,37 @@ export default async function ticketRoutes(fastify: FastifyInstance): Promise<vo
         prisma.ticket.count({ where }),
       ]);
 
+      // Fetch creator and assigned staff usernames for all tickets
+      const creatorIds = [...new Set(tickets.map((t) => t.creatorId))];
+      const assignedStaffIds = [...new Set(tickets.map((t) => t.assignedStaffId).filter(Boolean) as string[])];
+      
+      const [creators, assignedStaff] = await Promise.all([
+        prisma.memberRecord.findMany({
+          where: { discordId: { in: creatorIds } },
+          select: { discordId: true, discordTag: true },
+        }),
+        assignedStaffIds.length > 0
+          ? prisma.memberRecord.findMany({
+              where: { discordId: { in: assignedStaffIds } },
+              select: { discordId: true, discordTag: true },
+            })
+          : [],
+      ]);
+      
+      const creatorMap = new Map(creators.map((c) => [c.discordId, c.discordTag]));
+      const assignedStaffMap = new Map(assignedStaff.map((s) => [s.discordId, s.discordTag]));
+
+      // Add usernames to each ticket
+      const ticketsWithUsernames = tickets.map((ticket) => ({
+        ...ticket,
+        creatorUsername: creatorMap.get(ticket.creatorId) || ticket.creatorId,
+        assignedStaffUsername: ticket.assignedStaffId
+          ? assignedStaffMap.get(ticket.assignedStaffId) || ticket.assignedStaffId
+          : null,
+      }));
+
       return reply.send({
-        tickets,
+        tickets: ticketsWithUsernames,
         total,
         limit,
         offset,
@@ -132,7 +192,32 @@ export default async function ticketRoutes(fastify: FastifyInstance): Promise<vo
         return reply.status(404).send({ error: 'Ticket not found' });
       }
 
-      return reply.send(ticket);
+      // Fetch creator, assigned staff, and closer usernames
+      const [creator, assignedStaff, closer] = await Promise.all([
+        prisma.memberRecord.findUnique({
+          where: { discordId: ticket.creatorId },
+          select: { discordTag: true },
+        }),
+        ticket.assignedStaffId
+          ? prisma.memberRecord.findUnique({
+              where: { discordId: ticket.assignedStaffId },
+              select: { discordTag: true },
+            })
+          : null,
+        ticket.closedBy
+          ? prisma.memberRecord.findUnique({
+              where: { discordId: ticket.closedBy },
+              select: { discordTag: true },
+            })
+          : null,
+      ]);
+
+      return reply.send({
+        ...ticket,
+        creatorUsername: creator?.discordTag || ticket.creatorId,
+        assignedStaffUsername: assignedStaff?.discordTag || ticket.assignedStaffId || null,
+        closedByUsername: closer?.discordTag || ticket.closedBy || null,
+      });
     } catch (error) {
       fastify.log.error(error);
       return reply.status(500).send({ error: 'Failed to fetch ticket' });
@@ -176,8 +261,19 @@ export default async function ticketRoutes(fastify: FastifyInstance): Promise<vo
   fastify.post('/', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const body = createTicketSchema.parse(request.body);
+      
+      // Get the next ticket number
+      const lastTicket = await prisma.ticket.findFirst({
+        orderBy: { ticketNumber: 'desc' },
+        select: { ticketNumber: true },
+      });
+      const nextTicketNumber = (lastTicket?.ticketNumber || 0) + 1;
+
       const ticket = await prisma.ticket.create({
-        data: body,
+        data: {
+          ...body,
+          ticketNumber: nextTicketNumber,
+        },
         include: {
           verification: true,
           eventReport: true,
@@ -185,7 +281,16 @@ export default async function ticketRoutes(fastify: FastifyInstance): Promise<vo
         },
       });
 
-      return reply.status(201).send(ticket);
+      // Fetch creator username
+      const creator = await prisma.memberRecord.findUnique({
+        where: { discordId: ticket.creatorId },
+        select: { discordTag: true },
+      });
+
+      return reply.status(201).send({
+        ...ticket,
+        creatorUsername: creator?.discordTag || ticket.creatorId,
+      });
     } catch (error) {
       if (error instanceof z.ZodError) {
         return reply.status(400).send({ error: 'Validation error', details: error.errors });

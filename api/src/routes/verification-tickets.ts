@@ -45,8 +45,27 @@ export default async function verificationTicketRoutes(fastify: FastifyInstance)
         prisma.verificationTicket.count(),
       ]);
 
+      // Fetch usernames for all unique verifier IDs
+      const initialVerifierIds = verificationTickets.map((vt) => vt.initialVerifierId).filter((id): id is string => id !== null);
+      const finalVerifierIds = verificationTickets.map((vt) => vt.finalVerifierId).filter((id): id is string => id !== null);
+      const allVerifierIds = [...new Set([...initialVerifierIds, ...finalVerifierIds])];
+
+      const verifiers = await prisma.memberRecord.findMany({
+        where: { discordId: { in: allVerifierIds } },
+        select: { discordId: true, discordTag: true },
+      });
+
+      const verifierMap = new Map(verifiers.map((v) => [v.discordId, v.discordTag]));
+
+      // Add usernames to verification tickets
+      const verificationTicketsWithUsernames = verificationTickets.map((vt) => ({
+        ...vt,
+        initialVerifierUsername: vt.initialVerifierId ? verifierMap.get(vt.initialVerifierId) || null : null,
+        finalVerifierUsername: vt.finalVerifierId ? verifierMap.get(vt.finalVerifierId) || null : null,
+      }));
+
       return reply.send({
-        verificationTickets,
+        verificationTickets: verificationTicketsWithUsernames,
         total,
         limit,
         offset,

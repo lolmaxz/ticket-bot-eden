@@ -6,10 +6,17 @@ import { useState } from 'react';
 import { format } from 'date-fns';
 import { Shield, Search, CheckCircle, Clock, XCircle } from 'lucide-react';
 import Link from 'next/link';
+import { CopyIdButton } from '@/components/common/CopyIdButton';
+import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+
+type SortField = 'title' | 'verificationType' | 'status' | 'initialVerifierUsername' | 'finalVerifierUsername' | 'reminderCount' | 'createdAt';
+type SortDirection = 'asc' | 'desc' | null;
 
 export default function VerificationsPage(): JSX.Element {
   const [filters] = useState<Record<string, unknown>>({});
   const [searchTerm, setSearchTerm] = useState('');
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['verification-tickets', filters],
@@ -23,6 +30,77 @@ export default function VerificationsPage(): JSX.Element {
         vt.ticket.creatorId.toLowerCase().includes(searchTerm.toLowerCase())
       )
     : verificationTickets;
+
+  const handleSort = (field: SortField): void => {
+    if (sortField === field) {
+      if (sortDirection === 'asc') {
+        setSortDirection('desc');
+      } else if (sortDirection === 'desc') {
+        setSortField(null);
+        setSortDirection(null);
+      } else {
+        setSortDirection('asc');
+      }
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const sortedTickets = [...filteredTickets].sort((a, b) => {
+    if (!sortField || !sortDirection) return 0;
+    let aValue: string | number | null | undefined;
+    let bValue: string | number | null | undefined;
+    switch (sortField) {
+      case 'title':
+        aValue = a.ticket.title;
+        bValue = b.ticket.title;
+        break;
+      case 'verificationType':
+        aValue = a.verificationType;
+        bValue = b.verificationType;
+        break;
+      case 'status':
+        aValue = a.finalVerifiedAt ? 3 : a.initialVerifiedAt ? 2 : a.idReceivedAt ? 1 : 0;
+        bValue = b.finalVerifiedAt ? 3 : b.initialVerifiedAt ? 2 : b.idReceivedAt ? 1 : 0;
+        break;
+      case 'initialVerifierUsername':
+        aValue = (a as { initialVerifierUsername?: string | null }).initialVerifierUsername || a.initialVerifierId || '';
+        bValue = (b as { initialVerifierUsername?: string | null }).initialVerifierUsername || b.initialVerifierId || '';
+        break;
+      case 'finalVerifierUsername':
+        aValue = (a as { finalVerifierUsername?: string | null }).finalVerifierUsername || a.finalVerifierId || '';
+        bValue = (b as { finalVerifierUsername?: string | null }).finalVerifierUsername || b.finalVerifierId || '';
+        break;
+      case 'reminderCount':
+        aValue = a.reminderCount || 0;
+        bValue = b.reminderCount || 0;
+        break;
+      case 'createdAt':
+        aValue = new Date(a.ticket.createdAt).getTime();
+        bValue = new Date(b.ticket.createdAt).getTime();
+        break;
+      default:
+        return 0;
+    }
+    if (aValue === null || aValue === undefined) return 1;
+    if (bValue === null || bValue === undefined) return -1;
+    const comparison = aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+    return sortDirection === 'asc' ? comparison : -comparison;
+  });
+
+  const getSortIcon = (field: SortField): JSX.Element => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="h-3 w-3 text-gray-400" />;
+    }
+    if (sortDirection === 'asc') {
+      return <ArrowUp className="h-3 w-3 text-blue-600" />;
+    }
+    if (sortDirection === 'desc') {
+      return <ArrowDown className="h-3 w-3 text-blue-600" />;
+    }
+    return <ArrowUpDown className="h-3 w-3 text-gray-400" />;
+  };
 
   const getVerificationStatus = (vt: {
     initialVerifiedAt: string | null;
@@ -86,23 +164,59 @@ export default function VerificationsPage(): JSX.Element {
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      Ticket
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                      onClick={() => handleSort('title')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Ticket
+                        {getSortIcon('title')}
+                      </div>
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      Type
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                      onClick={() => handleSort('verificationType')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Type
+                        {getSortIcon('verificationType')}
+                      </div>
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      Status
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                      onClick={() => handleSort('status')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Status
+                        {getSortIcon('status')}
+                      </div>
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      Initial Verifier
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                      onClick={() => handleSort('initialVerifierUsername')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Initial Verifier
+                        {getSortIcon('initialVerifierUsername')}
+                      </div>
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      Final Verifier
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                      onClick={() => handleSort('finalVerifierUsername')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Final Verifier
+                        {getSortIcon('finalVerifierUsername')}
+                      </div>
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      Reminders
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                      onClick={() => handleSort('reminderCount')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Reminders
+                        {getSortIcon('reminderCount')}
+                      </div>
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                       Actions
@@ -110,7 +224,7 @@ export default function VerificationsPage(): JSX.Element {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
-                  {filteredTickets.map((vt: {
+                  {sortedTickets.map((vt: {
                     id: string;
                     ticketId: string;
                     verificationType: string;
@@ -142,10 +256,24 @@ export default function VerificationsPage(): JSX.Element {
                           </span>
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                          {vt.initialVerifierId || '-'}
+                          {vt.initialVerifierId ? (
+                            <div className="flex items-center gap-1.5">
+                              <span>{(vt as { initialVerifierUsername?: string | null }).initialVerifierUsername || vt.initialVerifierId}</span>
+                              <CopyIdButton id={vt.initialVerifierId} />
+                            </div>
+                          ) : (
+                            '-'
+                          )}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                          {vt.finalVerifierId || '-'}
+                          {vt.finalVerifierId ? (
+                            <div className="flex items-center gap-1.5">
+                              <span>{(vt as { finalVerifierUsername?: string | null }).finalVerifierUsername || vt.finalVerifierId}</span>
+                              <CopyIdButton id={vt.finalVerifierId} />
+                            </div>
+                          ) : (
+                            '-'
+                          )}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
                           {vt.reminderCount || 0}
@@ -211,11 +339,25 @@ export default function VerificationsPage(): JSX.Element {
                           </div>
                           <div>
                             <span className="font-medium text-gray-700">Initial Verifier:</span>
-                            <span className="ml-2 text-gray-900">{vt.initialVerifierId || '-'}</span>
+                            {vt.initialVerifierId ? (
+                              <div className="mt-1 flex items-center gap-1.5">
+                                <span className="text-gray-900">{(vt as { initialVerifierUsername?: string | null }).initialVerifierUsername || vt.initialVerifierId}</span>
+                                <CopyIdButton id={vt.initialVerifierId} />
+                              </div>
+                            ) : (
+                              <span className="ml-2 text-gray-500">-</span>
+                            )}
                           </div>
                           <div>
                             <span className="font-medium text-gray-700">Final Verifier:</span>
-                            <span className="ml-2 text-gray-900">{vt.finalVerifierId || '-'}</span>
+                            {vt.finalVerifierId ? (
+                              <div className="mt-1 flex items-center gap-1.5">
+                                <span className="text-gray-900">{(vt as { finalVerifierUsername?: string | null }).finalVerifierUsername || vt.finalVerifierId}</span>
+                                <CopyIdButton id={vt.finalVerifierId} />
+                              </div>
+                            ) : (
+                              <span className="ml-2 text-gray-500">-</span>
+                            )}
                           </div>
                         </div>
                         <div className="pt-2">
@@ -238,7 +380,7 @@ export default function VerificationsPage(): JSX.Element {
 
       {data && (
         <div className="text-sm text-gray-600">
-          Showing {filteredTickets.length} of {data.total || 0} verification tickets
+          Showing {sortedTickets.length} of {data.total || 0} verification tickets
         </div>
       )}
     </div>

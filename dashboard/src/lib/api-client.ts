@@ -33,7 +33,13 @@ export class ApiClient {
 
   // Tickets
   async getTickets(params?: Record<string, unknown>) {
-    const response = await this.client.get('/api/tickets', { params });
+    // Configure paramsSerializer to handle arrays properly for Fastify
+    const response = await this.client.get('/api/tickets', {
+      params,
+      paramsSerializer: {
+        indexes: null, // Serialize arrays as 'type=value1&type=value2' instead of 'type[]=value1&type[]=value2'
+      },
+    });
     return response.data;
   }
 
@@ -135,6 +141,17 @@ export class ApiClient {
 
   async getModOnCallByStaff(staffId: string) {
     const response = await this.client.get(`/api/mod-on-call/staff/${staffId}`);
+    return response.data;
+  }
+
+  // User Preferences
+  async getUserPreferences(discordId: string) {
+    const response = await this.client.get(`/api/user-preferences/${discordId}`);
+    return response.data;
+  }
+
+  async updateUserPreferences(discordId: string, data: { dateFormat?: 'absolute' | 'relative' }) {
+    const response = await this.client.patch(`/api/user-preferences/${discordId}`, data);
     return response.data;
   }
 

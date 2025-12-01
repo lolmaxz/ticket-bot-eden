@@ -70,6 +70,21 @@ This will start all services:
 
 The database will be automatically initialized when the API service starts. The Prisma schema is located in `shared/prisma/schema.prisma`.
 
+### 5. Seed Sample Data (Optional)
+
+To populate the database with sample data for testing:
+
+```bash
+# Using Docker
+docker-compose exec api npm run seed
+
+# Or locally (from api directory)
+cd api
+npm run seed
+```
+
+See `SEED_DATA.md` for more details.
+
 ### 5. Access the Dashboard
 
 Open your browser and navigate to:

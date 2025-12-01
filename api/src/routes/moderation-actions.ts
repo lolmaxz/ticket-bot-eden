@@ -93,8 +93,34 @@ export default async function moderationActionRoutes(fastify: FastifyInstance): 
         prisma.moderationAction.count({ where }),
       ]);
 
+      // Fetch usernames for all unique member and staff IDs
+      // memberId is the Discord user ID (String), staffId is also Discord ID
+      const memberDiscordIds = [...new Set(actions.map((a) => a.memberId))];
+      const staffIds = [...new Set(actions.map((a) => a.staffId))];
+      
+      const [members, staff] = await Promise.all([
+        prisma.memberRecord.findMany({
+          where: { discordId: { in: memberDiscordIds } },
+          select: { discordId: true, discordTag: true },
+        }),
+        prisma.memberRecord.findMany({
+          where: { discordId: { in: staffIds } },
+          select: { discordId: true, discordTag: true },
+        }),
+      ]);
+
+      const memberMap = new Map(members.map((m) => [m.discordId, m.discordTag]));
+      const staffMap = new Map(staff.map((s) => [s.discordId, s.discordTag]));
+
+      // Add usernames to actions
+      const actionsWithUsernames = actions.map((action) => ({
+        ...action,
+        memberUsername: memberMap.get(action.memberId) || action.memberId,
+        staffUsername: staffMap.get(action.staffId) || action.staffId,
+      }));
+
       return reply.send({
-        actions,
+        actions: actionsWithUsernames,
         total,
         limit,
         offset,

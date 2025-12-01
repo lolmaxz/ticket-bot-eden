@@ -72,8 +72,22 @@ export default async function warningRoutes(fastify: FastifyInstance): Promise<v
         prisma.warning.count({ where }),
       ]);
 
+      // Fetch staff usernames for all loggedBy IDs
+      const loggedByIds = [...new Set(warnings.map((w) => w.loggedBy))];
+      const staffMembers = await prisma.memberRecord.findMany({
+        where: { discordId: { in: loggedByIds } },
+        select: { discordId: true, discordTag: true },
+      });
+      const staffMap = new Map(staffMembers.map((s) => [s.discordId, s.discordTag]));
+
+      // Add staff usernames to warnings
+      const warningsWithUsernames = warnings.map((warning) => ({
+        ...warning,
+        loggedByUsername: staffMap.get(warning.loggedBy) || warning.loggedBy,
+      }));
+
       return reply.send({
-        warnings,
+        warnings: warningsWithUsernames,
         total,
         limit,
         offset,

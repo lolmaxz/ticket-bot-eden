@@ -31,7 +31,7 @@ const client = new SapphireCustomClient({
 	loadMessageCommandListeners: true
 });
 
-const main = async (): Promise<void> => {
+const main = async () => {
 	try {
 		client.logger.info('Logging in');
 		await client.login();

@@ -41,8 +41,22 @@ export default async function modOnCallRoutes(fastify: FastifyInstance): Promise
         prisma.modOnCall.count({ where }),
       ]);
 
+      // Fetch staff usernames for all staff IDs
+      const staffIds = [...new Set(records.map((r) => r.staffId))];
+      const staffMembers = await prisma.memberRecord.findMany({
+        where: { discordId: { in: staffIds } },
+        select: { discordId: true, discordTag: true },
+      });
+      const staffMap = new Map(staffMembers.map((s) => [s.discordId, s.discordTag]));
+
+      // Add staff usernames to records
+      const recordsWithUsernames = records.map((record) => ({
+        ...record,
+        staffUsername: staffMap.get(record.staffId) || record.staffId,
+      }));
+
       return reply.send({
-        records,
+        records: recordsWithUsernames,
         total,
         limit,
         offset,
@@ -65,7 +79,16 @@ export default async function modOnCallRoutes(fastify: FastifyInstance): Promise
         return reply.status(404).send({ error: 'No active mod on call found' });
       }
 
-      return reply.send(current);
+      // Fetch staff username
+      const staffMember = await prisma.memberRecord.findUnique({
+        where: { discordId: current.staffId },
+        select: { discordTag: true },
+      });
+
+      return reply.send({
+        ...current,
+        staffUsername: staffMember?.discordTag || current.staffId,
+      });
     } catch (error) {
       fastify.log.error(error);
       return reply.status(500).send({ error: 'Failed to fetch current mod on call' });

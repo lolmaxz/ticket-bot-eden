@@ -2,11 +2,18 @@
 
 import { useSession } from 'next-auth/react';
 import { useState } from 'react';
-import { User, Bell, Shield, Database, Info, Eye, EyeOff } from 'lucide-react';
+import { User, Bell, Shield, Database, Info, Eye, EyeOff, Clock } from 'lucide-react';
+import { useDateFormat } from '@/lib/use-date-format';
 
 export default function SettingsPage(): JSX.Element {
   const { data: session } = useSession();
   const [emailRevealed, setEmailRevealed] = useState(false);
+  const [dateFormat, setDateFormat] = useDateFormat();
+  
+  const handleDateFormatChange = (e: React.ChangeEvent<HTMLSelectElement>): void => {
+    const newFormat = e.target.value as 'absolute' | 'relative';
+    setDateFormat(newFormat);
+  };
 
   const censorEmail = (email: string | null | undefined): string => {
     if (!email) return 'Not available';
@@ -85,6 +92,30 @@ export default function SettingsPage(): JSX.Element {
                   </button>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Display Settings */}
+        <div className="rounded-lg bg-white p-6 shadow-sm">
+          <div className="mb-4 flex items-center space-x-2">
+            <Clock className="h-5 w-5 text-gray-600" />
+            <h2 className="text-lg font-semibold text-gray-900">Display</h2>
+          </div>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-sm font-medium text-gray-700">Ticket Date Format</label>
+                <p className="text-xs text-gray-500">Choose how ticket dates are displayed</p>
+              </div>
+              <select
+                value={dateFormat}
+                onChange={handleDateFormatChange}
+                className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="absolute">Absolute Date</option>
+                <option value="relative">Relative Time (e.g., &quot;2h ago&quot;)</option>
+              </select>
             </div>
           </div>
         </div>

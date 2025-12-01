@@ -4,6 +4,12 @@ import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import { format } from 'date-fns';
 import { Clock, User, Ticket, FileText, Calendar } from 'lucide-react';
+import { CopyIdButton } from '@/components/common/CopyIdButton';
+import { useState } from 'react';
+import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+
+type SortField = 'staffUsername' | 'weekStart' | 'ticketsClosed' | 'recordsLogged' | 'isActive';
+type SortDirection = 'asc' | 'desc' | null;
 
 export default function ModOnCallPage(): JSX.Element {
   const { data: currentMod, isLoading: currentLoading, error: currentError } = useQuery({
@@ -18,6 +24,71 @@ export default function ModOnCallPage(): JSX.Element {
   });
 
   const records = allRecords?.records || [];
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
+
+  const handleSort = (field: SortField): void => {
+    if (sortField === field) {
+      if (sortDirection === 'asc') {
+        setSortDirection('desc');
+      } else if (sortDirection === 'desc') {
+        setSortField(null);
+        setSortDirection(null);
+      } else {
+        setSortDirection('asc');
+      }
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const sortedRecords = [...records].sort((a, b) => {
+    if (!sortField || !sortDirection) return 0;
+    let aValue: string | number | boolean | null | undefined;
+    let bValue: string | number | boolean | null | undefined;
+    switch (sortField) {
+      case 'staffUsername':
+        aValue = a.staffUsername || a.staffId;
+        bValue = b.staffUsername || b.staffId;
+        break;
+      case 'weekStart':
+        aValue = new Date(a.weekStart).getTime();
+        bValue = new Date(b.weekStart).getTime();
+        break;
+      case 'ticketsClosed':
+        aValue = a.ticketsClosed || 0;
+        bValue = b.ticketsClosed || 0;
+        break;
+      case 'recordsLogged':
+        aValue = a.recordsLogged || 0;
+        bValue = b.recordsLogged || 0;
+        break;
+      case 'isActive':
+        aValue = a.isActive ? 1 : 0;
+        bValue = b.isActive ? 1 : 0;
+        break;
+      default:
+        return 0;
+    }
+    if (aValue === null || aValue === undefined) return 1;
+    if (bValue === null || bValue === undefined) return -1;
+    const comparison = aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+    return sortDirection === 'asc' ? comparison : -comparison;
+  });
+
+  const getSortIcon = (field: SortField): JSX.Element => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="h-3 w-3 text-gray-400" />;
+    }
+    if (sortDirection === 'asc') {
+      return <ArrowUp className="h-3 w-3 text-blue-600" />;
+    }
+    if (sortDirection === 'desc') {
+      return <ArrowDown className="h-3 w-3 text-blue-600" />;
+    }
+    return <ArrowUpDown className="h-3 w-3 text-gray-400" />;
+  };
 
   return (
     <div className="flex-1 space-y-4 p-4 lg:space-y-6 lg:p-6">
@@ -44,7 +115,12 @@ export default function ModOnCallPage(): JSX.Element {
                 <User className="h-5 w-5 text-blue-600" />
                 <span className="text-sm font-medium text-blue-900">Staff Member</span>
               </div>
-              <p className="mt-2 text-2xl font-bold text-blue-900">{currentMod.staffId}</p>
+              <div className="mt-2 flex items-center gap-1.5">
+                <p className="text-2xl font-bold text-blue-900">
+                  {(currentMod as { staffUsername?: string }).staffUsername || currentMod.staffId}
+                </p>
+                <CopyIdButton id={currentMod.staffId} />
+              </div>
             </div>
             <div className="rounded-lg bg-green-50 p-4">
               <div className="flex items-center space-x-2">
@@ -104,27 +180,58 @@ export default function ModOnCallPage(): JSX.Element {
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      Staff Member
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                      onClick={() => handleSort('staffUsername')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Staff Member
+                        {getSortIcon('staffUsername')}
+                      </div>
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      Week Period
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                      onClick={() => handleSort('weekStart')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Week Period
+                        {getSortIcon('weekStart')}
+                      </div>
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      Tickets Closed
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                      onClick={() => handleSort('ticketsClosed')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Tickets Closed
+                        {getSortIcon('ticketsClosed')}
+                      </div>
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      Records Logged
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                      onClick={() => handleSort('recordsLogged')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Records Logged
+                        {getSortIcon('recordsLogged')}
+                      </div>
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      Status
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                      onClick={() => handleSort('isActive')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Status
+                        {getSortIcon('isActive')}
+                      </div>
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
-                  {records.map((record: {
+                  {sortedRecords.map((record: {
                     id: string;
                     staffId: string;
+                    staffUsername?: string;
                     weekStart: string;
                     weekEnd: string;
                     ticketsClosed: number;
@@ -133,7 +240,10 @@ export default function ModOnCallPage(): JSX.Element {
                   }) => (
                     <tr key={record.id} className="hover:bg-gray-50">
                       <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
-                        {record.staffId}
+                        <div className="flex items-center gap-1.5">
+                          <span>{record.staffUsername || record.staffId}</span>
+                          <CopyIdButton id={record.staffId} />
+                        </div>
                       </td>
                       <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                         {format(new Date(record.weekStart), 'MMM d')} -{' '}
@@ -165,9 +275,10 @@ export default function ModOnCallPage(): JSX.Element {
             {/* Mobile Card Layout */}
             <div className="lg:hidden">
               <div className="divide-y divide-gray-200">
-                {records.map((record: {
+                {sortedRecords.map((record: {
                   id: string;
                   staffId: string;
+                  staffUsername?: string;
                   weekStart: string;
                   weekEnd: string;
                   ticketsClosed: number;
@@ -181,7 +292,12 @@ export default function ModOnCallPage(): JSX.Element {
                     <div className="space-y-3">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <h3 className="text-sm font-medium text-gray-900">{record.staffId}</h3>
+                          <div className="flex items-center gap-1.5">
+                            <h3 className="text-sm font-medium text-gray-900">
+                              {record.staffUsername || record.staffId}
+                            </h3>
+                            <CopyIdButton id={record.staffId} />
+                          </div>
                           <p className="mt-1 text-xs text-gray-500">
                             {format(new Date(record.weekStart), 'MMM d')} -{' '}
                             {format(new Date(record.weekEnd), 'MMM d, yyyy')}

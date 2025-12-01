@@ -70,7 +70,10 @@ export function Sidebar({ isMobileOpen: externalIsMobileOpen, setIsMobileOpen: e
 
         <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-4">
           {navigation.map((item) => {
-            const isActive = pathname === item.href || pathname?.startsWith(item.href + '/');
+            // For Dashboard, only match exact path. For others, match exact or sub-paths
+            const isActive = item.href === '/dashboard'
+              ? pathname === '/dashboard' || pathname === '/dashboard/'
+              : pathname === item.href || pathname?.startsWith(item.href + '/');
             return (
               <Link
                 key={item.name}

@@ -13,6 +13,7 @@ datasource db {
 // Ticket Management
 model Ticket {
   id            String   @id @default(uuid())
+  ticketNumber  Int?     @unique // Numerical ticket ID for display
   discordId     String   @unique // Discord thread/channel ID
   guildId       String
   type          TicketType
@@ -117,7 +118,21 @@ model MemberRecord {
   // Relations
   warnings    Warning[]
   moderationActions ModerationAction[]
+  userPreferences UserPreferences?
   // Note: Tickets reference memberId directly, not through relation
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// User Preferences (dashboard settings per user)
+model UserPreferences {
+  id          String   @id @default(uuid())
+  discordId   String   @unique // Discord user ID
+  dateFormat  String   @default("absolute") // "absolute" or "relative"
+  
+  // Relations
+  member      MemberRecord @relation(fields: [discordId], references: [discordId], onDelete: Cascade)
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

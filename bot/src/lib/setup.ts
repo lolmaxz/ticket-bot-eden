@@ -16,5 +16,3 @@ setup({ path: join(srcDir, '.env') });
 
 // Enable colorette
 colorette.createColors({ useColor: true });
-
-

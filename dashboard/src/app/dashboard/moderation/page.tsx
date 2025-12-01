@@ -5,10 +5,17 @@ import { apiClient } from '@/lib/api-client';
 import { useState } from 'react';
 import { format } from 'date-fns';
 import { Shield, Search } from 'lucide-react';
+import { CopyIdButton } from '@/components/common/CopyIdButton';
+import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+
+type SortField = 'memberUsername' | 'staffUsername' | 'actionType' | 'reason' | 'when' | 'duration' | 'isActive';
+type SortDirection = 'asc' | 'desc' | null;
 
 export default function ModerationLogsPage(): JSX.Element {
   const [filters, setFilters] = useState<Record<string, unknown>>({});
   const [searchTerm, setSearchTerm] = useState('');
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['moderation-actions', filters],
@@ -17,12 +24,96 @@ export default function ModerationLogsPage(): JSX.Element {
 
   const actions = data?.actions || [];
   const filteredActions = searchTerm
-    ? actions.filter((action: { memberId: string; staffId: string; reason: string }) =>
-        action.memberId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        action.staffId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        action.reason.toLowerCase().includes(searchTerm.toLowerCase())
-      )
+    ? actions.filter((action: { 
+        memberUsername?: string; 
+        memberId: string; 
+        staffUsername?: string; 
+        staffId: string; 
+        reason: string 
+      }) => {
+        const memberName = (action.memberUsername || action.memberId).toLowerCase();
+        const staffName = (action.staffUsername || action.staffId).toLowerCase();
+        const searchLower = searchTerm.toLowerCase();
+        return (
+          memberName.includes(searchLower) ||
+          staffName.includes(searchLower) ||
+          action.memberId.toLowerCase().includes(searchLower) ||
+          action.staffId.toLowerCase().includes(searchLower) ||
+          action.reason.toLowerCase().includes(searchLower)
+        );
+      })
     : actions;
+
+  const handleSort = (field: SortField): void => {
+    if (sortField === field) {
+      if (sortDirection === 'asc') {
+        setSortDirection('desc');
+      } else if (sortDirection === 'desc') {
+        setSortField(null);
+        setSortDirection(null);
+      } else {
+        setSortDirection('asc');
+      }
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const sortedActions = [...filteredActions].sort((a, b) => {
+    if (!sortField || !sortDirection) return 0;
+    let aValue: string | number | boolean | null | undefined;
+    let bValue: string | number | boolean | null | undefined;
+    switch (sortField) {
+      case 'memberUsername':
+        aValue = a.memberUsername || a.memberId;
+        bValue = b.memberUsername || b.memberId;
+        break;
+      case 'staffUsername':
+        aValue = a.staffUsername || a.staffId;
+        bValue = b.staffUsername || b.staffId;
+        break;
+      case 'actionType':
+        aValue = a.actionType;
+        bValue = b.actionType;
+        break;
+      case 'reason':
+        aValue = a.reason;
+        bValue = b.reason;
+        break;
+      case 'when':
+        aValue = new Date(a.when).getTime();
+        bValue = new Date(b.when).getTime();
+        break;
+      case 'duration':
+        aValue = a.duration || '';
+        bValue = b.duration || '';
+        break;
+      case 'isActive':
+        aValue = a.isActive ? 1 : 0;
+        bValue = b.isActive ? 1 : 0;
+        break;
+      default:
+        return 0;
+    }
+    if (aValue === null || aValue === undefined) return 1;
+    if (bValue === null || bValue === undefined) return -1;
+    const comparison = aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+    return sortDirection === 'asc' ? comparison : -comparison;
+  });
+
+  const getSortIcon = (field: SortField): JSX.Element => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="h-3 w-3 text-gray-400" />;
+    }
+    if (sortDirection === 'asc') {
+      return <ArrowUp className="h-3 w-3 text-blue-600" />;
+    }
+    if (sortDirection === 'desc') {
+      return <ArrowDown className="h-3 w-3 text-blue-600" />;
+    }
+    return <ArrowUpDown className="h-3 w-3 text-gray-400" />;
+  };
 
   const getActionTypeColor = (type: string): string => {
     if (type.includes('BAN') || type.includes('KICK')) {
@@ -111,34 +202,78 @@ export default function ModerationLogsPage(): JSX.Element {
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      Member
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                      onClick={() => handleSort('memberUsername')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Member
+                        {getSortIcon('memberUsername')}
+                      </div>
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      Staff
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                      onClick={() => handleSort('staffUsername')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Staff
+                        {getSortIcon('staffUsername')}
+                      </div>
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      Action
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                      onClick={() => handleSort('actionType')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Action
+                        {getSortIcon('actionType')}
+                      </div>
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      Reason
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                      onClick={() => handleSort('reason')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Reason
+                        {getSortIcon('reason')}
+                      </div>
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      When
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                      onClick={() => handleSort('when')}
+                    >
+                      <div className="flex items-center gap-1">
+                        When
+                        {getSortIcon('when')}
+                      </div>
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      Duration
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                      onClick={() => handleSort('duration')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Duration
+                        {getSortIcon('duration')}
+                      </div>
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      Status
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100 select-none"
+                      onClick={() => handleSort('isActive')}
+                    >
+                      <div className="flex items-center gap-1">
+                        Status
+                        {getSortIcon('isActive')}
+                      </div>
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
-                  {filteredActions.map((action: {
+                  {sortedActions.map((action: {
                     id: string;
                     memberId: string;
+                    memberUsername?: string;
                     staffId: string;
+                    staffUsername?: string;
                     actionType: string;
                     reason: string;
                     when: string;
@@ -147,10 +282,16 @@ export default function ModerationLogsPage(): JSX.Element {
                   }) => (
                     <tr key={action.id} className="hover:bg-gray-50">
                       <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
-                        {action.memberId}
+                        <div className="flex items-center justify-between">
+                          <span>{action.memberUsername || action.memberId}</span>
+                          <CopyIdButton id={action.memberId} />
+                        </div>
                       </td>
                       <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                        {action.staffId}
+                        <div className="flex items-center justify-between">
+                          <span>{action.staffUsername || action.staffId}</span>
+                          <CopyIdButton id={action.staffId} />
+                        </div>
                       </td>
                       <td className="whitespace-nowrap px-6 py-4">
                         <span
@@ -188,10 +329,12 @@ export default function ModerationLogsPage(): JSX.Element {
             {/* Mobile Card Layout */}
             <div className="lg:hidden">
               <div className="divide-y divide-gray-200">
-                {filteredActions.map((action: {
+                {sortedActions.map((action: {
                   id: string;
                   memberId: string;
+                  memberUsername?: string;
                   staffId: string;
+                  staffUsername?: string;
                   actionType: string;
                   reason: string;
                   when: string;
@@ -205,8 +348,18 @@ export default function ModerationLogsPage(): JSX.Element {
                     <div className="space-y-3">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <h3 className="text-sm font-medium text-gray-900">Member: {action.memberId}</h3>
-                          <p className="mt-1 text-xs text-gray-500">Staff: {action.staffId}</p>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-medium text-gray-900">
+                              Member: {action.memberUsername || action.memberId}
+                            </h3>
+                            <CopyIdButton id={action.memberId} />
+                          </div>
+                          <div className="mt-1 flex items-center gap-2">
+                            <p className="text-xs text-gray-500">
+                              Staff: {action.staffUsername || action.staffId}
+                            </p>
+                            <CopyIdButton id={action.staffId} />
+                          </div>
                         </div>
                         <span
                           className={`ml-2 inline-flex rounded-full px-2 py-1 text-xs font-semibold flex-shrink-0 ${getActionTypeColor(action.actionType)}`}
@@ -255,7 +408,7 @@ export default function ModerationLogsPage(): JSX.Element {
 
       {data && (
         <div className="text-sm text-gray-600">
-          Showing {filteredActions.length} of {data.total || 0} moderation actions
+          Showing {sortedActions.length} of {data.total || 0} moderation actions
         </div>
       )}
     </div>

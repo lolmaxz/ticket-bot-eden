@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
+import qs from 'qs';
 import ticketRoutes from './routes/tickets';
 import ticketMessageRoutes from './routes/ticket-messages';
 import ticketLogRoutes from './routes/ticket-logs';
@@ -12,10 +13,15 @@ import modOnCallRoutes from './routes/mod-on-call';
 import verificationTicketRoutes from './routes/verification-tickets';
 import eventReportTicketRoutes from './routes/event-report-tickets';
 import staffTalkTicketRoutes from './routes/staff-talk-tickets';
+import seedRoutes from './routes/seed';
+import userPreferencesRoutes from './routes/user-preferences';
 import prisma from './lib/prisma';
 
 const fastify = Fastify({
   logger: true,
+  querystringParser: (str) => {
+    return qs.parse(str, { arrayLimit: Infinity });
+  },
 });
 
 async function start(): Promise<void> {
@@ -43,6 +49,8 @@ async function start(): Promise<void> {
     await fastify.register(verificationTicketRoutes, { prefix: '/api/verification-tickets' });
     await fastify.register(eventReportTicketRoutes, { prefix: '/api/event-report-tickets' });
     await fastify.register(staffTalkTicketRoutes, { prefix: '/api/staff-talk-tickets' });
+    await fastify.register(seedRoutes, { prefix: '/api' });
+    await fastify.register(userPreferencesRoutes, { prefix: '/api/user-preferences' });
 
     const port = Number(process.env.PORT) || 3000;
     const host = '0.0.0.0';
