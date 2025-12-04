@@ -12,6 +12,7 @@ const updateMemberRecordSchema = z.object({
 });
 
 export default async function memberRecordRoutes(fastify: FastifyInstance): Promise<void> {
+  // Authorization is handled by the Next.js proxy route
   // Get all member records
   fastify.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
     try {

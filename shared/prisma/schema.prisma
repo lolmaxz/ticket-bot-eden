@@ -13,17 +13,16 @@ datasource db {
 // Ticket Management
 model Ticket {
   id            String   @id @default(uuid())
-  ticketNumber  Int?     @unique // Numerical ticket ID for display
-  discordId     String   @unique // Discord thread/channel ID
+  ticketNumber  Int      @unique @default(autoincrement()) // Auto-incrementing numerical ticket ID for display
+  ticketThreadId String  @unique // Discord thread/channel ID
   guildId       String
   type          TicketType
   status        TicketStatus
   title         String
 
-  // Participants
-  creatorId     String   // Discord user ID who created ticket
-  memberId      String?  // Discord user ID of member involved (for staff-talk)
-  assignedStaffId String? // Discord user ID of assigned staff
+  // Opener
+  openedById    String   // MemberRecord ID who created ticket
+  openedBy      MemberRecord @relation("TicketOpener", fields: [openedById], references: [id], onDelete: Restrict)
 
   // Metadata
   createdAt     DateTime @default(now())
@@ -36,13 +35,14 @@ model Ticket {
   messages      TicketMessage[]
   logs          TicketLog[]
   assignments   TicketAssignment[]
+  staffParticipants TicketStaffParticipation[]
+  memberParticipants TicketMemberParticipation[]
   verification  VerificationTicket?
   eventReport   EventReportTicket?
   staffTalk     StaffTalkTicket?
 
   @@index([guildId, status])
-  @@index([assignedStaffId])
-  @@index([memberId])
+  @@index([openedById])
 }
 
 enum TicketType {
@@ -109,17 +109,61 @@ model TicketAssignment {
   @@index([staffId])
 }
 
+// Staff Participation (tracks all staff who participated in any capacity on a ticket)
+// This will be populated by the Discord bot when staff interact with tickets
+model TicketStaffParticipation {
+  id          String   @id @default(uuid())
+  ticketId    String
+  staffId     String   // Discord user ID
+  participationType String // "assigned", "message", "closed", "action", etc.
+  participatedAt DateTime @default(now())
+  metadata    Json?    // Additional context (message count, action type, etc.)
+
+  ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([staffId])
+  @@index([participationType])
+  @@index([participatedAt])
+}
+
+// Member Participation (tracks regular members who participated in tickets, besides the opener)
+// This will be populated by the Discord bot when members are added to tickets
+model TicketMemberParticipation {
+  id          String   @id @default(uuid())
+  ticketId    String
+  memberId    String   // MemberRecord ID
+  member      MemberRecord @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  participationType String // "added", "message", "removed", etc.
+  participatedAt DateTime @default(now())
+  metadata    Json?    // Additional context (message count, etc.)
+
+  ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([memberId])
+  @@index([participationType])
+  @@index([participatedAt])
+}
+
 // Member Records (for GitHub-style tracking)
 model MemberRecord {
   id          String   @id @default(uuid())
   discordId   String   @unique
   discordTag  String
+  displayName String?  // Display name (may differ from username)
+  avatarUrl   String?
+  bannerUrl   String?
+  accentColor Int?     // Stored as integer (0xRRGGBB format)
 
   // Relations
   warnings    Warning[]
   moderationActions ModerationAction[]
   userPreferences UserPreferences?
-  // Note: Tickets reference memberId directly, not through relation
+  openedTickets Ticket[] @relation("TicketOpener")
+  ticketMemberParticipations TicketMemberParticipation[]
+  initialVerifications VerificationTicket[] @relation("InitialVerifier")
+  finalVerifications VerificationTicket[] @relation("FinalVerifier")
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -233,9 +277,6 @@ enum ModerationActionType {
   UNBAN
   WATCHLIST_ADDED
   WATCHLIST_REMOVED
-  MESSAGE_DELETED
-  ROLE_ADDED
-  ROLE_REMOVED
   VERIFICATION_REVOKED
   VERIFICATION_GRANTED
   OTHER
@@ -264,11 +305,12 @@ model ModOnCall {
 model VerificationTicket {
   id          String   @id @default(uuid())
   ticketId    String   @unique
-  verificationType String @default("ID") // Only "ID" - VRChat handled by Hephia
 
   // Verification steps
-  initialVerifierId String? // Cutie Helper or Moderator who did initial
-  finalVerifierId   String? // Moderator who closed (must be different)
+  initialVerifierId String? // MemberRecord ID - Cutie Helper or Moderator who did initial
+  initialVerifier   MemberRecord? @relation("InitialVerifier", fields: [initialVerifierId], references: [id], onDelete: SetNull)
+  finalVerifierId   String? // MemberRecord ID - Moderator who closed (must be different)
+  finalVerifier     MemberRecord? @relation("FinalVerifier", fields: [finalVerifierId], references: [id], onDelete: SetNull)
 
   // Status tracking
   idReceivedAt      DateTime?
@@ -282,6 +324,8 @@ model VerificationTicket {
   ticket            Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 
   @@index([ticketId])
+  @@index([initialVerifierId])
+  @@index([finalVerifierId])
 }
 
 // Event Report-specific data
@@ -322,6 +366,106 @@ model StaffTalkTicket {
   @@index([ticketId])
   @@index([targetMemberId])
   @@index([isPunishmentTicket])
+}
+
+// Ticket Bot Settings (global bot configuration)
+model TicketBotSettings {
+  id          String   @id @default(uuid())
+  guildId     String   @unique // Discord guild ID
+
+  // Ticket limits
+  maxTicketsPerUser Int @default(1) // Maximum tickets that can be opened at once per user
+
+  // Language (for future i18n support)
+  botLanguage String?  // Language code (e.g., "en", "fr")
+
+  // User permissions
+  allowUserCloseTickets Boolean @default(false) // Allow users to close tickets themselves
+  userFeedbackEnabled Boolean @default(true) // User Feedback toggle
+
+  // Panel channel
+  panelChannelId String? // Channel ID which will host the panel and from which tickets will be opened
+
+  // Transcript settings
+  transcriptEnabled Boolean @default(true) // Enabling transcript (toggle)
+  transcriptChannelId String? // Channel ID to log transcripts to
+  sendTranscriptToUser Boolean @default(false) // Toggle send transcript to user
+  sendTranscriptToParticipants Boolean @default(false) // Toggle send transcript to all participants
+  sendTranscriptOnlyToMembersLeft Boolean @default(false) // If sendTranscriptToParticipants is on: send transcript only to members left in the ticket
+
+  // Auto-close settings
+  autoCloseEnabled Boolean @default(false) // Toggle auto close on/off (the whole system toggle)
+  autoCloseOnUserLeaving Boolean @default(false) // Auto close on user leaving toggle
+  autoCloseAfterNoResponse Boolean @default(false) // Close after X time of no response in a ticket (toggle)
+  autoCloseAfterNoResponseMinutes Int? // Number of minutes for no response auto-close
+  autoCloseAfterOpening Boolean @default(false) // Close after X time since ticket opening (toggle)
+  autoCloseAfterOpeningMinutes Int? // Number of minutes for opening auto-close
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([guildId])
+}
+
+// Ticket Type Settings (configuration per ticket type)
+model TicketTypeSettings {
+  id          String   @id @default(uuid())
+  guildId     String
+  ticketType  TicketType
+
+  // Transcript override (0: bot default, 1: true, 2: false)
+  transcriptOverride Int @default(0)
+
+  // Role mentions
+  mentionRoleIds Json @default("[]") // Array of role IDs that will be pinged when the ticket is opened
+
+  // Display settings
+  name        String   // Name of the ticket type
+  description String?  @db.Text // Description of the ticket type (for internally)
+
+  // Naming scheme
+  namingSchemeOverride String? // Naming scheme override + custom field
+
+  // Button/UI settings
+  buttonColor String?  // Button color (hex or Discord color)
+  buttonText  String?  // Button text
+  emojiEnabled Boolean @default(false) // Emoji toggle
+  emoji       String?  // Emoji picker value
+
+  // Images
+  largeImageUrl String? // Large image URL (for embed)
+  thumbnailImageUrl String? // Small preview image URL (thumbnail for embed)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  group       TicketGroupSettings? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  groupId     String?
+
+  @@unique([guildId, ticketType])
+  @@index([guildId])
+  @@index([groupId])
+}
+
+// Ticket Group Settings (groups of ticket types, e.g., for select menus)
+model TicketGroupSettings {
+  id          String   @id @default(uuid())
+  guildId     String
+  name        String   // Group name
+  description String?  @db.Text
+
+  // Select menu settings
+  useSelectMenu Boolean @default(false) // Toggle for select menu instead of dedicated buttons
+  selectMenuPlaceholder String? // Select menu placeholder by default
+
+  // Relations
+  ticketTypes TicketTypeSettings[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([guildId])
 }
 
 

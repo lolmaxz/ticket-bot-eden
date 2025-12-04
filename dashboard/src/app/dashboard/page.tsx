@@ -1,24 +1,28 @@
-'use client';
+"use client";
 
-import { useSession } from 'next-auth/react';
-import { useQuery } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
-import { StatsCards } from '@/components/dashboard/StatsCards';
-import { TicketOverview } from '@/components/dashboard/TicketOverview';
+import { CopyIdButton } from "@/components/common/CopyIdButton";
+import { StatsCards } from "@/components/dashboard/StatsCards";
+import { TicketOverview } from "@/components/dashboard/TicketOverview";
+import { apiClient } from "@/lib/api-client";
+import { useQuery } from "@tanstack/react-query";
+import { useSession } from "next-auth/react";
 
 export default function DashboardPage(): JSX.Element {
   const { data: session, status } = useSession();
 
   // In development mode with SKIP_AUTH, bypass authentication check
-  const SKIP_AUTH = process.env.NEXT_PUBLIC_SKIP_AUTH === 'true';
-  
+  const SKIP_AUTH = process.env.NEXT_PUBLIC_SKIP_AUTH === "true";
+
   const { data: ticketsData, isLoading: ticketsLoading } = useQuery({
-    queryKey: ['tickets', 'overview'],
-    queryFn: () => apiClient.getTickets({ limit: '100' }),
-    enabled: status === 'authenticated' || SKIP_AUTH,
+    queryKey: ["tickets", "overview"],
+    queryFn: () => apiClient.getTickets({ limit: "100" }),
+    enabled: status === "authenticated" || SKIP_AUTH,
+    staleTime: 2 * 60 * 1000, // 2 minutes - data is fresh for 2 minutes
+    refetchOnMount: false, // Don't refetch on mount if data exists in cache
+    refetchOnWindowFocus: false, // Don't refetch on window focus
   });
 
-  if (status === 'loading') {
+  if (status === "loading") {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="text-center">
@@ -29,7 +33,7 @@ export default function DashboardPage(): JSX.Element {
     );
   }
 
-  if (status === 'unauthenticated' && !SKIP_AUTH) {
+  if (status === "unauthenticated" && !SKIP_AUTH) {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="text-center">
@@ -43,10 +47,18 @@ export default function DashboardPage(): JSX.Element {
   return (
     <div className="flex-1 space-y-4 p-4 lg:space-y-6 lg:p-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 lg:text-3xl">Dashboard</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Welcome back, {session?.user?.username || 'User'}!
-        </p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white lg:text-3xl">Dashboard</h1>
+        <div className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+          <div>
+            Welcome back, <span className="font-semibold text-gray-900 dark:text-white">{session?.user?.username || "User"}</span>
+          </div>
+          {session?.user?.username && session?.user?.id && (
+            <div className="mt-0.5 flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+              <span>{session.user.username}</span>
+              <CopyIdButton id={session.user.id} size="small" />
+            </div>
+          )}
+        </div>
       </div>
 
       <StatsCards tickets={ticketsData?.tickets || []} loading={ticketsLoading} />
@@ -55,4 +67,3 @@ export default function DashboardPage(): JSX.Element {
     </div>
   );
 }
-

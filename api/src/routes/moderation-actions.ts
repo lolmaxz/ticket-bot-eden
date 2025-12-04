@@ -11,9 +11,6 @@ const ModerationActionTypeEnum = z.enum([
   'UNBAN',
   'WATCHLIST_ADDED',
   'WATCHLIST_REMOVED',
-  'MESSAGE_DELETED',
-  'ROLE_ADDED',
-  'ROLE_REMOVED',
   'VERIFICATION_REVOKED',
   'VERIFICATION_GRANTED',
   'OTHER',
@@ -46,6 +43,7 @@ const updateModerationActionSchema = z.object({
 });
 
 export default async function moderationActionRoutes(fastify: FastifyInstance): Promise<void> {
+  // Authorization is handled by the Next.js proxy route
   // Get all moderation actions with filters
   fastify.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
@@ -62,7 +60,18 @@ export default async function moderationActionRoutes(fastify: FastifyInstance): 
       const where: Record<string, unknown> = {};
 
       if (query.memberId) {
-        where.memberId = query.memberId;
+        // memberId could be either a UUID (MemberRecord.id) or Discord ID
+        // First try to find by Discord ID and get the UUID
+        const memberByDiscordId = await prisma.memberRecord.findUnique({
+          where: { discordId: query.memberId },
+          select: { id: true },
+        });
+        if (memberByDiscordId) {
+          where.memberId = memberByDiscordId.id;
+        } else {
+          // If not found by Discord ID, assume it's a UUID
+          where.memberId = query.memberId;
+        }
       }
       if (query.staffId) {
         where.staffId = query.staffId;
@@ -88,36 +97,37 @@ export default async function moderationActionRoutes(fastify: FastifyInstance): 
           orderBy: { when: 'desc' },
           include: {
             warning: true,
+            member: {
+              select: { id: true, discordId: true, discordTag: true, displayName: true },
+            },
           },
         }),
         prisma.moderationAction.count({ where }),
       ]);
 
-      // Fetch usernames for all unique member and staff IDs
-      // memberId is the Discord user ID (String), staffId is also Discord ID
-      const memberDiscordIds = [...new Set(actions.map((a) => a.memberId))];
+      // Fetch usernames for staff IDs (staffId is Discord ID, not MemberRecord.id)
       const staffIds = [...new Set(actions.map((a) => a.staffId))];
-      
-      const [members, staff] = await Promise.all([
-        prisma.memberRecord.findMany({
-          where: { discordId: { in: memberDiscordIds } },
-          select: { discordId: true, discordTag: true },
-        }),
-        prisma.memberRecord.findMany({
-          where: { discordId: { in: staffIds } },
-          select: { discordId: true, discordTag: true },
-        }),
-      ]);
+      const staff = await prisma.memberRecord.findMany({
+        where: { discordId: { in: staffIds } },
+        select: { discordId: true, discordTag: true, displayName: true },
+      });
 
-      const memberMap = new Map(members.map((m) => [m.discordId, m.discordTag]));
-      const staffMap = new Map(staff.map((s) => [s.discordId, s.discordTag]));
+      const staffMap = new Map(staff.map((s) => [s.discordId, { username: s.discordTag, displayName: s.displayName }]));
 
       // Add usernames to actions
-      const actionsWithUsernames = actions.map((action) => ({
-        ...action,
-        memberUsername: memberMap.get(action.memberId) || action.memberId,
-        staffUsername: staffMap.get(action.staffId) || action.staffId,
-      }));
+      // memberId is MemberRecord.id (UUID), so we use the relation
+      // staffId is Discord ID, so we look it up
+      const actionsWithUsernames = actions.map((action) => {
+        const staffInfo = staffMap.get(action.staffId);
+        return {
+          ...action,
+          memberUsername: action.member?.discordTag || action.memberId,
+          memberDisplayName: action.member?.displayName || null,
+          memberDiscordId: action.member?.discordId || null, // Add Discord ID for ProfileCard
+          staffUsername: staffInfo?.username || action.staffId,
+          staffDisplayName: staffInfo?.displayName || null,
+        };
+      });
 
       return reply.send({
         actions: actionsWithUsernames,

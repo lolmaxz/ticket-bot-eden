@@ -4,19 +4,21 @@ const API_URL = process.env.API_URL || "http://localhost:3000";
 
 interface Ticket {
   id: string;
-  discordId: string;
+  ticketThreadId: string;
+  ticketNumber?: number;
   guildId: string;
   type: string;
   status: string;
   title: string;
-  creatorId: string;
-  memberId?: string | null;
-  assignedStaffId?: string | null;
+  openedById: string; // MemberRecord ID
   createdAt: Date;
   updatedAt: Date;
   closedAt?: Date | null;
   closedBy?: string | null;
   closeReason?: string | null;
+  // Backward compatibility fields
+  discordId?: string; // Maps to ticketThreadId
+  creatorId?: string; // Maps to openedBy.discordId
 }
 
 /**
@@ -28,14 +30,12 @@ export class TicketAPI {
    * Create a new ticket via API
    */
   public async createTicket(data: {
-    discordId: string;
+    ticketThreadId: string;
     guildId: string;
     type: string;
     status?: string;
     title: string;
-    creatorId: string;
-    memberId?: string;
-    assignedStaffId?: string;
+    openedById: string; // MemberRecord ID
   }): Promise<Ticket> {
     try {
       const response = await axios.post(`${API_URL}/api/tickets`, {
@@ -52,11 +52,11 @@ export class TicketAPI {
   }
 
   /**
-   * Get ticket by Discord ID
+   * Get ticket by Discord thread ID
    */
-  public async getTicketByDiscordId(discordId: string): Promise<Ticket | null> {
+  public async getTicketByThreadId(ticketThreadId: string): Promise<Ticket | null> {
     try {
-      const response = await axios.get(`${API_URL}/api/tickets/discord/${discordId}`);
+      const response = await axios.get(`${API_URL}/api/tickets/discord/${ticketThreadId}`);
       return response.data;
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.status === 404) {
@@ -67,6 +67,14 @@ export class TicketAPI {
       }
       throw error;
     }
+  }
+
+  /**
+   * Get ticket by Discord ID (backward compatibility)
+   * @deprecated Use getTicketByThreadId instead
+   */
+  public async getTicketByDiscordId(discordId: string): Promise<Ticket | null> {
+    return this.getTicketByThreadId(discordId);
   }
 
   /**

@@ -3,15 +3,20 @@ import prisma from '../lib/prisma';
 async function assignTicketNumbers(): Promise<void> {
   console.log('🔢 Assigning ticket numbers to existing tickets...');
 
-  // Get all tickets without ticket numbers, ordered by creation date
-  const ticketsWithoutNumbers = await prisma.ticket.findMany({
-    where: {
-      ticketNumber: null,
-    },
+  // Get all tickets, ordered by creation date
+  // Note: ticketNumber is now auto-increment, so this script is mainly for legacy data
+  const allTickets = await prisma.ticket.findMany({
     orderBy: {
       createdAt: 'asc',
     },
+    select: {
+      id: true,
+      ticketNumber: true,
+    },
   });
+
+  // Filter tickets that might need numbers (though auto-increment should handle this)
+  const ticketsWithoutNumbers = allTickets.filter(t => !t.ticketNumber);
 
   if (ticketsWithoutNumbers.length === 0) {
     console.log('✅ All tickets already have ticket numbers!');
@@ -19,19 +24,9 @@ async function assignTicketNumbers(): Promise<void> {
   }
 
   // Get the highest existing ticket number
-  const lastTicket = await prisma.ticket.findFirst({
-    where: {
-      ticketNumber: {
-        not: null,
-      },
-    },
-    orderBy: {
-      ticketNumber: 'desc',
-    },
-    select: {
-      ticketNumber: true,
-    },
-  });
+  const lastTicket = allTickets
+    .filter(t => t.ticketNumber !== null)
+    .sort((a, b) => (b.ticketNumber || 0) - (a.ticketNumber || 0))[0];
 
   let nextTicketNumber = (lastTicket?.ticketNumber || 0) + 1;
 

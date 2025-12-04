@@ -28,6 +28,7 @@ const updateWarningSchema = z.object({
 });
 
 export default async function warningRoutes(fastify: FastifyInstance): Promise<void> {
+  // Authorization is handled by the Next.js proxy route
   // Get all warnings with filters
   fastify.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
@@ -43,7 +44,18 @@ export default async function warningRoutes(fastify: FastifyInstance): Promise<v
       const where: Record<string, unknown> = {};
 
       if (query.memberId) {
-        where.memberId = query.memberId;
+        // memberId could be either a UUID (MemberRecord.id) or Discord ID
+        // First try to find by Discord ID and get the UUID
+        const memberByDiscordId = await prisma.memberRecord.findUnique({
+          where: { discordId: query.memberId },
+          select: { id: true },
+        });
+        if (memberByDiscordId) {
+          where.memberId = memberByDiscordId.id;
+        } else {
+          // If not found by Discord ID, assume it's a UUID
+          where.memberId = query.memberId;
+        }
       }
       if (query.type) {
         where.type = query.type;
@@ -76,15 +88,19 @@ export default async function warningRoutes(fastify: FastifyInstance): Promise<v
       const loggedByIds = [...new Set(warnings.map((w) => w.loggedBy))];
       const staffMembers = await prisma.memberRecord.findMany({
         where: { discordId: { in: loggedByIds } },
-        select: { discordId: true, discordTag: true },
+        select: { discordId: true, discordTag: true, displayName: true },
       });
-      const staffMap = new Map(staffMembers.map((s) => [s.discordId, s.discordTag]));
+      const staffMap = new Map(staffMembers.map((s) => [s.discordId, { username: s.discordTag, displayName: s.displayName }]));
 
       // Add staff usernames to warnings
-      const warningsWithUsernames = warnings.map((warning) => ({
-        ...warning,
-        loggedByUsername: staffMap.get(warning.loggedBy) || warning.loggedBy,
-      }));
+      const warningsWithUsernames = warnings.map((warning) => {
+        const staffInfo = staffMap.get(warning.loggedBy);
+        return {
+          ...warning,
+          loggedByUsername: staffInfo?.username || warning.loggedBy,
+          loggedByDisplayName: staffInfo?.displayName || null,
+        };
+      });
 
       return reply.send({
         warnings: warningsWithUsernames,

@@ -6,9 +6,10 @@ import { Copy, Check } from 'lucide-react';
 interface CopyIdButtonProps {
   id: string;
   className?: string;
+  size?: 'small' | 'default';
 }
 
-export function CopyIdButton({ id, className = '' }: CopyIdButtonProps): JSX.Element {
+export function CopyIdButton({ id, className = '', size = 'default' }: CopyIdButtonProps): JSX.Element {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async (e: React.MouseEvent): Promise<void> => {
@@ -23,17 +24,20 @@ export function CopyIdButton({ id, className = '' }: CopyIdButtonProps): JSX.Ele
     }
   };
 
+  const iconSize = size === 'small' ? 'h-2 w-2' : 'h-2.5 w-2.5';
+  const padding = size === 'small' ? 'px-0.5 py-0' : 'px-1 py-0.5';
+
   return (
     <button
       type="button"
       onClick={handleCopy}
-      className={`inline-flex items-center justify-center rounded border border-gray-300 bg-white px-1 py-0.5 text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700 ${className}`}
+      className={`inline-flex items-center justify-center rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 ${padding} text-gray-500 dark:text-gray-400 transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-300 ${className}`}
       title="Copy ID"
     >
       {copied ? (
-        <Check className="h-2.5 w-2.5" />
+        <Check className={iconSize} />
       ) : (
-        <Copy className="h-2.5 w-2.5" />
+        <Copy className={iconSize} />
       )}
     </button>
   );

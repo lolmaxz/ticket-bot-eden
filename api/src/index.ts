@@ -15,6 +15,8 @@ import eventReportTicketRoutes from './routes/event-report-tickets';
 import staffTalkTicketRoutes from './routes/staff-talk-tickets';
 import seedRoutes from './routes/seed';
 import userPreferencesRoutes from './routes/user-preferences';
+import discordUserRoutes from './routes/discord-users';
+import adminRoutes from './routes/admin';
 import prisma from './lib/prisma';
 
 const fastify = Fastify({
@@ -51,6 +53,8 @@ async function start(): Promise<void> {
     await fastify.register(staffTalkTicketRoutes, { prefix: '/api/staff-talk-tickets' });
     await fastify.register(seedRoutes, { prefix: '/api' });
     await fastify.register(userPreferencesRoutes, { prefix: '/api/user-preferences' });
+    await fastify.register(discordUserRoutes, { prefix: '/api/discord-users' });
+    await fastify.register(adminRoutes, { prefix: '/api/admin' });
 
     const port = Number(process.env.PORT) || 3000;
     const host = '0.0.0.0';

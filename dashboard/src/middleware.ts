@@ -15,8 +15,8 @@ const middleware = SKIP_AUTH
           // Protect all routes except auth pages and public assets
           const { pathname } = req.nextUrl;
 
-          // Allow login pages and root redirect
-          if (pathname.startsWith('/login') || pathname === '/') {
+          // Allow root and no-permission page
+          if (pathname === '/' || pathname === '/no-permission') {
             return true;
           }
 
@@ -44,8 +44,8 @@ const middleware = SKIP_AUTH
         },
       },
       pages: {
-        signIn: '/login',
-        error: '/login/error',
+        signIn: '/',
+        error: '/no-permission',
       },
     });
 

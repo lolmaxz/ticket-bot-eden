@@ -18,6 +18,7 @@ const updateModOnCallSchema = z.object({
 });
 
 export default async function modOnCallRoutes(fastify: FastifyInstance): Promise<void> {
+  // Authorization is handled by the Next.js proxy route
   // Get all mod on call records
   fastify.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
@@ -45,15 +46,19 @@ export default async function modOnCallRoutes(fastify: FastifyInstance): Promise
       const staffIds = [...new Set(records.map((r) => r.staffId))];
       const staffMembers = await prisma.memberRecord.findMany({
         where: { discordId: { in: staffIds } },
-        select: { discordId: true, discordTag: true },
+        select: { discordId: true, discordTag: true, displayName: true },
       });
-      const staffMap = new Map(staffMembers.map((s) => [s.discordId, s.discordTag]));
+      const staffMap = new Map(staffMembers.map((s) => [s.discordId, { username: s.discordTag, displayName: s.displayName }]));
 
       // Add staff usernames to records
-      const recordsWithUsernames = records.map((record) => ({
-        ...record,
-        staffUsername: staffMap.get(record.staffId) || record.staffId,
-      }));
+      const recordsWithUsernames = records.map((record) => {
+        const staffInfo = staffMap.get(record.staffId);
+        return {
+          ...record,
+          staffUsername: staffInfo?.username || record.staffId,
+          staffDisplayName: staffInfo?.displayName || null,
+        };
+      });
 
       return reply.send({
         records: recordsWithUsernames,

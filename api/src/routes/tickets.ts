@@ -15,27 +15,24 @@ const TicketTypeEnum = z.enum([
 const TicketStatusEnum = z.enum(['OPEN', 'IN_PROGRESS', 'AWAITING_RESPONSE', 'CLOSED', 'ARCHIVED']);
 
 const createTicketSchema = z.object({
-  discordId: z.string(),
+  ticketThreadId: z.string(),
   guildId: z.string(),
   type: TicketTypeEnum,
   status: TicketStatusEnum.default('OPEN'),
   title: z.string(),
-  creatorId: z.string(),
-  memberId: z.string().optional(),
-  assignedStaffId: z.string().optional(),
+  openedById: z.string(), // MemberRecord ID
 });
 
 const updateTicketSchema = z.object({
   status: TicketStatusEnum.optional(),
   title: z.string().optional(),
-  memberId: z.string().optional().nullable(),
-  assignedStaffId: z.string().optional().nullable(),
   closedAt: z.string().datetime().optional().nullable(),
   closedBy: z.string().optional().nullable(),
   closeReason: z.string().optional().nullable(),
 });
 
 export default async function ticketRoutes(fastify: FastifyInstance): Promise<void> {
+  // Authorization is handled by the Next.js proxy route
   // Get all tickets with filters
   fastify.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
@@ -44,9 +41,7 @@ export default async function ticketRoutes(fastify: FastifyInstance): Promise<vo
         type?: string | string[];
         'type[]'?: string | string[];
         'status[]'?: string | string[];
-        assignedStaffId?: string;
-        creatorId?: string;
-        memberId?: string;
+        openedById?: string;
         guildId?: string;
         limit?: string;
         offset?: string;
@@ -86,14 +81,8 @@ export default async function ticketRoutes(fastify: FastifyInstance): Promise<vo
           where.type = typeValue;
         }
       }
-      if (query.assignedStaffId) {
-        where.assignedStaffId = query.assignedStaffId;
-      }
-      if (query.creatorId) {
-        where.creatorId = query.creatorId;
-      }
-      if (query.memberId) {
-        where.memberId = query.memberId;
+      if (query.openedById) {
+        where.openedById = query.openedById;
       }
       if (query.guildId) {
         where.guildId = query.guildId;
@@ -112,6 +101,9 @@ export default async function ticketRoutes(fastify: FastifyInstance): Promise<vo
           skip: offset,
           orderBy: { createdAt: 'desc' },
           include: {
+            openedBy: {
+              select: { discordId: true, discordTag: true, displayName: true },
+            },
             messages: {
               take: 1,
               orderBy: { createdAt: 'desc' },
@@ -125,34 +117,36 @@ export default async function ticketRoutes(fastify: FastifyInstance): Promise<vo
         prisma.ticket.count({ where }),
       ]);
 
-      // Fetch creator and assigned staff usernames for all tickets
-      const creatorIds = [...new Set(tickets.map((t) => t.creatorId))];
-      const assignedStaffIds = [...new Set(tickets.map((t) => t.assignedStaffId).filter(Boolean) as string[])];
+      // Fetch closer usernames for all tickets
+      const closedByIds = [...new Set(tickets.map((t) => t.closedBy).filter(Boolean) as string[])];
       
-      const [creators, assignedStaff] = await Promise.all([
-        prisma.memberRecord.findMany({
-          where: { discordId: { in: creatorIds } },
-          select: { discordId: true, discordTag: true },
-        }),
-        assignedStaffIds.length > 0
-          ? prisma.memberRecord.findMany({
-              where: { discordId: { in: assignedStaffIds } },
-              select: { discordId: true, discordTag: true },
-            })
-          : [],
-      ]);
+      const closers = closedByIds.length > 0
+        ? await prisma.memberRecord.findMany({
+            where: { discordId: { in: closedByIds } },
+            select: { discordId: true, discordTag: true, displayName: true },
+          })
+        : [];
       
-      const creatorMap = new Map(creators.map((c) => [c.discordId, c.discordTag]));
-      const assignedStaffMap = new Map(assignedStaff.map((s) => [s.discordId, s.discordTag]));
+      const closerMap = new Map(closers.map((c) => [c.discordId, { username: c.discordTag, displayName: c.displayName }]));
 
-      // Add usernames to each ticket
-      const ticketsWithUsernames = tickets.map((ticket) => ({
-        ...ticket,
-        creatorUsername: creatorMap.get(ticket.creatorId) || ticket.creatorId,
-        assignedStaffUsername: ticket.assignedStaffId
-          ? assignedStaffMap.get(ticket.assignedStaffId) || ticket.assignedStaffId
-          : null,
-      }));
+      // Add usernames and lastInteraction to each ticket
+      const ticketsWithUsernames = tickets.map((ticket) => {
+        // Get last interaction from latest message or use updatedAt
+        const lastMessage = ticket.messages && ticket.messages.length > 0 ? ticket.messages[0] : null;
+        const lastInteraction = lastMessage?.createdAt || ticket.updatedAt;
+        
+        const closedByInfo = ticket.closedBy ? closerMap.get(ticket.closedBy) : null;
+        return {
+          ...ticket,
+          creatorUsername: ticket.openedBy?.discordTag || null,
+          creatorDisplayName: ticket.openedBy?.displayName || null,
+          creatorId: ticket.openedBy?.discordId || null, // Keep for backward compatibility
+          closedByUsername: closedByInfo?.username || ticket.closedBy || null,
+          closedByDisplayName: closedByInfo?.displayName || null,
+          closedAt: ticket.closedAt ? new Date(ticket.closedAt).toISOString() : null,
+          lastInteraction: lastInteraction ? new Date(lastInteraction).toISOString() : undefined,
+        };
+      });
 
       return reply.send({
         tickets: ticketsWithUsernames,
@@ -173,6 +167,9 @@ export default async function ticketRoutes(fastify: FastifyInstance): Promise<vo
       const ticket = await prisma.ticket.findUnique({
         where: { id: params.id },
         include: {
+          openedBy: {
+            select: { discordId: true, discordTag: true, displayName: true },
+          },
           messages: {
             orderBy: { createdAt: 'asc' },
           },
@@ -192,31 +189,21 @@ export default async function ticketRoutes(fastify: FastifyInstance): Promise<vo
         return reply.status(404).send({ error: 'Ticket not found' });
       }
 
-      // Fetch creator, assigned staff, and closer usernames
-      const [creator, assignedStaff, closer] = await Promise.all([
-        prisma.memberRecord.findUnique({
-          where: { discordId: ticket.creatorId },
-          select: { discordTag: true },
-        }),
-        ticket.assignedStaffId
-          ? prisma.memberRecord.findUnique({
-              where: { discordId: ticket.assignedStaffId },
-              select: { discordTag: true },
-            })
-          : null,
-        ticket.closedBy
-          ? prisma.memberRecord.findUnique({
-              where: { discordId: ticket.closedBy },
-              select: { discordTag: true },
-            })
-          : null,
-      ]);
+      // Fetch closer username
+      const closer = ticket.closedBy
+        ? await prisma.memberRecord.findUnique({
+            where: { discordId: ticket.closedBy },
+            select: { discordTag: true, displayName: true },
+          })
+        : null;
 
       return reply.send({
         ...ticket,
-        creatorUsername: creator?.discordTag || ticket.creatorId,
-        assignedStaffUsername: assignedStaff?.discordTag || ticket.assignedStaffId || null,
+        creatorUsername: ticket.openedBy?.discordTag || null,
+        creatorDisplayName: ticket.openedBy?.displayName || null,
+        creatorId: ticket.openedBy?.discordId || null, // Keep for backward compatibility
         closedByUsername: closer?.discordTag || ticket.closedBy || null,
+        closedByDisplayName: closer?.displayName || null,
       });
     } catch (error) {
       fastify.log.error(error);
@@ -224,13 +211,16 @@ export default async function ticketRoutes(fastify: FastifyInstance): Promise<vo
     }
   });
 
-  // Get ticket by Discord ID
-  fastify.get('/discord/:discordId', async (request: FastifyRequest, reply: FastifyReply) => {
+  // Get ticket by Discord thread ID
+  fastify.get('/discord/:ticketThreadId', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const params = request.params as { discordId: string };
+      const params = request.params as { ticketThreadId: string };
       const ticket = await prisma.ticket.findUnique({
-        where: { discordId: params.discordId },
+        where: { ticketThreadId: params.ticketThreadId },
         include: {
+          openedBy: {
+            select: { discordId: true, discordTag: true, displayName: true },
+          },
           messages: {
             orderBy: { createdAt: 'asc' },
           },
@@ -250,7 +240,13 @@ export default async function ticketRoutes(fastify: FastifyInstance): Promise<vo
         return reply.status(404).send({ error: 'Ticket not found' });
       }
 
-      return reply.send(ticket);
+      return reply.send({
+        ...ticket,
+        creatorUsername: ticket.openedBy?.discordTag || null,
+        creatorDisplayName: ticket.openedBy?.displayName || null,
+        creatorId: ticket.openedBy?.discordId || null, // Keep for backward compatibility
+        discordId: ticket.ticketThreadId, // Keep for backward compatibility
+      });
     } catch (error) {
       fastify.log.error(error);
       return reply.status(500).send({ error: 'Failed to fetch ticket' });
@@ -262,34 +258,32 @@ export default async function ticketRoutes(fastify: FastifyInstance): Promise<vo
     try {
       const body = createTicketSchema.parse(request.body);
       
-      // Get the next ticket number
-      const lastTicket = await prisma.ticket.findFirst({
-        orderBy: { ticketNumber: 'desc' },
-        select: { ticketNumber: true },
-      });
-      const nextTicketNumber = (lastTicket?.ticketNumber || 0) + 1;
-
+      // Ticket number is now auto-increment, so we don't need to calculate it
       const ticket = await prisma.ticket.create({
         data: {
-          ...body,
-          ticketNumber: nextTicketNumber,
+          ticketThreadId: body.ticketThreadId,
+          guildId: body.guildId,
+          type: body.type,
+          status: body.status,
+          title: body.title,
+          openedById: body.openedById,
         },
         include: {
+          openedBy: {
+            select: { discordId: true, discordTag: true, displayName: true },
+          },
           verification: true,
           eventReport: true,
           staffTalk: true,
         },
       });
 
-      // Fetch creator username
-      const creator = await prisma.memberRecord.findUnique({
-        where: { discordId: ticket.creatorId },
-        select: { discordTag: true },
-      });
-
       return reply.status(201).send({
         ...ticket,
-        creatorUsername: creator?.discordTag || ticket.creatorId,
+        creatorUsername: ticket.openedBy?.discordTag || null,
+        creatorDisplayName: ticket.openedBy?.displayName || null,
+        creatorId: ticket.openedBy?.discordId || null, // Keep for backward compatibility
+        discordId: ticket.ticketThreadId, // Keep for backward compatibility
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -309,8 +303,6 @@ export default async function ticketRoutes(fastify: FastifyInstance): Promise<vo
       const updateData: Record<string, unknown> = {};
       if (body.status !== undefined) updateData.status = body.status;
       if (body.title !== undefined) updateData.title = body.title;
-      if (body.memberId !== undefined) updateData.memberId = body.memberId;
-      if (body.assignedStaffId !== undefined) updateData.assignedStaffId = body.assignedStaffId;
       if (body.closedAt !== undefined) updateData.closedAt = body.closedAt ? new Date(body.closedAt) : null;
       if (body.closedBy !== undefined) updateData.closedBy = body.closedBy;
       if (body.closeReason !== undefined) updateData.closeReason = body.closeReason;
@@ -319,13 +311,22 @@ export default async function ticketRoutes(fastify: FastifyInstance): Promise<vo
         where: { id: params.id },
         data: updateData,
         include: {
+          openedBy: {
+            select: { discordId: true, discordTag: true, displayName: true },
+          },
           verification: true,
           eventReport: true,
           staffTalk: true,
         },
       });
 
-      return reply.send(ticket);
+      return reply.send({
+        ...ticket,
+        creatorUsername: ticket.openedBy?.discordTag || null,
+        creatorDisplayName: ticket.openedBy?.displayName || null,
+        creatorId: ticket.openedBy?.discordId || null, // Keep for backward compatibility
+        discordId: ticket.ticketThreadId, // Keep for backward compatibility
+      });
     } catch (error) {
       if (error instanceof z.ZodError) {
         return reply.status(400).send({ error: 'Validation error', details: error.errors });

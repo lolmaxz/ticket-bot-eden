@@ -36,7 +36,7 @@ export const authOptions: NextAuthOptions = {
           clientSecret: DISCORD_CLIENT_SECRET || "",
           authorization: {
             params: {
-              scope: "identify email guilds",
+              scope: "identify email guilds guilds.members.read",
             },
           },
         }),
@@ -55,6 +55,7 @@ export const authOptions: NextAuthOptions = {
         };
       }
 
+      // On initial sign-in, account and profile are provided
       if (account && profile) {
         token.accessToken = account.access_token;
         // Discord profile type assertion
@@ -69,6 +70,15 @@ export const authOptions: NextAuthOptions = {
         token.discriminator = discordProfile.discriminator;
         token.avatar = discordProfile.avatar;
       }
+      
+      // CRITICAL: Preserve accessToken on subsequent requests
+      // If account is not present (subsequent requests), ensure accessToken persists
+      // This is essential for maintaining authentication across page navigations
+      if (!account && !token.accessToken) {
+        console.warn('JWT callback: accessToken missing on subsequent request');
+      }
+      
+      // Always return the token with preserved values
       return token;
     },
     async session({ session, token }) {
@@ -101,8 +111,8 @@ export const authOptions: NextAuthOptions = {
     },
   },
   pages: {
-    signIn: "/login",
-    error: "/login/error",
+    signIn: "/",
+    error: "/no-permission",
   },
   secret: process.env.NEXTAUTH_SECRET || (SKIP_AUTH ? "dev-secret-key-change-in-production" : undefined),
   session: {

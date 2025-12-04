@@ -4,9 +4,8 @@ import prisma from '../lib/prisma';
 
 const createVerificationTicketSchema = z.object({
   ticketId: z.string(),
-  verificationType: z.string().default('ID'),
-  initialVerifierId: z.string().optional().nullable(),
-  finalVerifierId: z.string().optional().nullable(),
+  initialVerifierId: z.string().optional().nullable(), // MemberRecord ID
+  finalVerifierId: z.string().optional().nullable(), // MemberRecord ID
   idReceivedAt: z.string().datetime().optional().nullable(),
   initialVerifiedAt: z.string().datetime().optional().nullable(),
   finalVerifiedAt: z.string().datetime().optional().nullable(),
@@ -15,8 +14,8 @@ const createVerificationTicketSchema = z.object({
 });
 
 const updateVerificationTicketSchema = z.object({
-  initialVerifierId: z.string().optional().nullable(),
-  finalVerifierId: z.string().optional().nullable(),
+  initialVerifierId: z.string().optional().nullable(), // MemberRecord ID
+  finalVerifierId: z.string().optional().nullable(), // MemberRecord ID
   idReceivedAt: z.string().datetime().optional().nullable(),
   initialVerifiedAt: z.string().datetime().optional().nullable(),
   finalVerifiedAt: z.string().datetime().optional().nullable(),
@@ -25,44 +24,105 @@ const updateVerificationTicketSchema = z.object({
 });
 
 export default async function verificationTicketRoutes(fastify: FastifyInstance): Promise<void> {
+  // Authorization is handled by the Next.js proxy route
   // Get all verification tickets
   fastify.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const query = request.query as { limit?: string; offset?: string };
+      const query = request.query as { 
+        limit?: string; 
+        offset?: string;
+        status?: string | string[];
+        'status[]'?: string | string[];
+        initialVerifierId?: string; // MemberRecord ID
+        openedById?: string; // MemberRecord ID (ticket opener)
+        ticketId?: string;
+      };
 
       const limit = query.limit ? parseInt(query.limit, 10) : 50;
       const offset = query.offset ? parseInt(query.offset, 10) : 0;
 
+      // Handle status filter
+      const where: Record<string, unknown> = {};
+      const statusValue = query['status[]'] || query.status;
+      if (statusValue) {
+        let statusArray: string[];
+        if (Array.isArray(statusValue)) {
+          statusArray = statusValue;
+        } else if (typeof statusValue === 'string' && statusValue.includes(',')) {
+          statusArray = statusValue.split(',').map((s) => s.trim());
+        } else {
+          statusArray = [statusValue];
+        }
+        where.ticket = {
+          status: { in: statusArray },
+        };
+      }
+      
+      // Handle initialVerifierId filter (staff who opened)
+      if (query.initialVerifierId) {
+        where.initialVerifierId = query.initialVerifierId;
+      }
+      
+      // Handle openedById filter (member who opened ticket)
+      if (query.openedById) {
+        where.ticket = {
+          ...(where.ticket as Record<string, unknown> || {}),
+          openedById: query.openedById,
+        };
+      }
+      
+      // Handle ticketId filter (specific ticket ID)
+      if (query.ticketId) {
+        where.ticketId = query.ticketId;
+      }
+
       const [verificationTickets, total] = await Promise.all([
         prisma.verificationTicket.findMany({
+          where,
           take: limit,
           skip: offset,
           orderBy: { ticket: { createdAt: 'desc' } },
           include: {
-            ticket: true,
+            initialVerifier: {
+              select: { id: true, discordId: true, discordTag: true, displayName: true },
+            },
+            finalVerifier: {
+              select: { id: true, discordId: true, discordTag: true, displayName: true },
+            },
+            ticket: {
+              include: {
+                openedBy: {
+                  select: { discordId: true, discordTag: true, displayName: true },
+                },
+                messages: {
+                  take: 1,
+                  orderBy: { createdAt: 'desc' },
+                },
+              },
+            },
           },
         }),
-        prisma.verificationTicket.count(),
+        prisma.verificationTicket.count({ where }),
       ]);
 
-      // Fetch usernames for all unique verifier IDs
-      const initialVerifierIds = verificationTickets.map((vt) => vt.initialVerifierId).filter((id): id is string => id !== null);
-      const finalVerifierIds = verificationTickets.map((vt) => vt.finalVerifierId).filter((id): id is string => id !== null);
-      const allVerifierIds = [...new Set([...initialVerifierIds, ...finalVerifierIds])];
-
-      const verifiers = await prisma.memberRecord.findMany({
-        where: { discordId: { in: allVerifierIds } },
-        select: { discordId: true, discordTag: true },
+      // Add usernames and lastInteraction to verification tickets
+      const verificationTicketsWithUsernames = verificationTickets.map((vt) => {
+        // Get last interaction from latest message or use ticket updatedAt
+        const lastMessage = vt.ticket.messages && vt.ticket.messages.length > 0 ? vt.ticket.messages[0] : null;
+        const lastInteraction = lastMessage?.createdAt || vt.ticket.updatedAt;
+        
+        return {
+          ...vt,
+          initialVerifierUsername: vt.initialVerifier?.discordTag || null,
+          initialVerifierDisplayName: vt.initialVerifier?.displayName || null,
+          finalVerifierUsername: vt.finalVerifier?.discordTag || null,
+          finalVerifierDisplayName: vt.finalVerifier?.displayName || null,
+          creatorUsername: vt.ticket.openedBy?.discordTag || null,
+          creatorDisplayName: vt.ticket.openedBy?.displayName || null,
+          creatorId: vt.ticket.openedBy?.discordId || null, // Keep for backward compatibility
+          lastInteraction: lastInteraction ? new Date(lastInteraction).toISOString() : undefined,
+        };
       });
-
-      const verifierMap = new Map(verifiers.map((v) => [v.discordId, v.discordTag]));
-
-      // Add usernames to verification tickets
-      const verificationTicketsWithUsernames = verificationTickets.map((vt) => ({
-        ...vt,
-        initialVerifierUsername: vt.initialVerifierId ? verifierMap.get(vt.initialVerifierId) || null : null,
-        finalVerifierUsername: vt.finalVerifierId ? verifierMap.get(vt.finalVerifierId) || null : null,
-      }));
 
       return reply.send({
         verificationTickets: verificationTicketsWithUsernames,
@@ -83,8 +143,17 @@ export default async function verificationTicketRoutes(fastify: FastifyInstance)
       const verificationTicket = await prisma.verificationTicket.findUnique({
         where: { id: params.id },
         include: {
+          initialVerifier: {
+            select: { id: true, discordId: true, discordTag: true, displayName: true },
+          },
+          finalVerifier: {
+            select: { id: true, discordId: true, discordTag: true, displayName: true },
+          },
           ticket: {
             include: {
+              openedBy: {
+                select: { discordId: true, discordTag: true, displayName: true },
+              },
               messages: true,
               logs: true,
             },
@@ -96,7 +165,12 @@ export default async function verificationTicketRoutes(fastify: FastifyInstance)
         return reply.status(404).send({ error: 'Verification ticket not found' });
       }
 
-      return reply.send(verificationTicket);
+      return reply.send({
+        ...verificationTicket,
+        creatorUsername: verificationTicket.ticket.openedBy?.discordTag || null,
+        creatorDisplayName: verificationTicket.ticket.openedBy?.displayName || null,
+        creatorId: verificationTicket.ticket.openedBy?.discordId || null, // Keep for backward compatibility
+      });
     } catch (error) {
       fastify.log.error(error);
       return reply.status(500).send({ error: 'Failed to fetch verification ticket' });
@@ -110,8 +184,17 @@ export default async function verificationTicketRoutes(fastify: FastifyInstance)
       const verificationTicket = await prisma.verificationTicket.findUnique({
         where: { ticketId: params.ticketId },
         include: {
+          initialVerifier: {
+            select: { id: true, discordId: true, discordTag: true, displayName: true },
+          },
+          finalVerifier: {
+            select: { id: true, discordId: true, discordTag: true, displayName: true },
+          },
           ticket: {
             include: {
+              openedBy: {
+                select: { discordId: true, discordTag: true, displayName: true },
+              },
               messages: true,
               logs: true,
             },
@@ -123,7 +206,12 @@ export default async function verificationTicketRoutes(fastify: FastifyInstance)
         return reply.status(404).send({ error: 'Verification ticket not found' });
       }
 
-      return reply.send(verificationTicket);
+      return reply.send({
+        ...verificationTicket,
+        creatorUsername: verificationTicket.ticket.openedBy?.discordTag || null,
+        creatorDisplayName: verificationTicket.ticket.openedBy?.displayName || null,
+        creatorId: verificationTicket.ticket.openedBy?.discordId || null, // Keep for backward compatibility
+      });
     } catch (error) {
       fastify.log.error(error);
       return reply.status(500).send({ error: 'Failed to fetch verification ticket' });
@@ -136,18 +224,38 @@ export default async function verificationTicketRoutes(fastify: FastifyInstance)
       const body = createVerificationTicketSchema.parse(request.body);
       const verificationTicket = await prisma.verificationTicket.create({
         data: {
-          ...body,
+          ticketId: body.ticketId,
+          initialVerifierId: body.initialVerifierId,
+          finalVerifierId: body.finalVerifierId,
           idReceivedAt: body.idReceivedAt ? new Date(body.idReceivedAt) : null,
           initialVerifiedAt: body.initialVerifiedAt ? new Date(body.initialVerifiedAt) : null,
           finalVerifiedAt: body.finalVerifiedAt ? new Date(body.finalVerifiedAt) : null,
+          reminderCount: body.reminderCount,
           lastReminderAt: body.lastReminderAt ? new Date(body.lastReminderAt) : null,
         },
         include: {
-          ticket: true,
+          initialVerifier: {
+            select: { id: true, discordId: true, discordTag: true, displayName: true },
+          },
+          finalVerifier: {
+            select: { id: true, discordId: true, discordTag: true, displayName: true },
+          },
+          ticket: {
+            include: {
+              openedBy: {
+                select: { discordId: true, discordTag: true, displayName: true },
+              },
+            },
+          },
         },
       });
 
-      return reply.status(201).send(verificationTicket);
+      return reply.status(201).send({
+        ...verificationTicket,
+        creatorUsername: verificationTicket.ticket.openedBy?.discordTag || null,
+        creatorDisplayName: verificationTicket.ticket.openedBy?.displayName || null,
+        creatorId: verificationTicket.ticket.openedBy?.discordId || null, // Keep for backward compatibility
+      });
     } catch (error) {
       if (error instanceof z.ZodError) {
         return reply.status(400).send({ error: 'Validation error', details: error.errors });
@@ -176,11 +284,28 @@ export default async function verificationTicketRoutes(fastify: FastifyInstance)
         where: { id: params.id },
         data: updateData,
         include: {
-          ticket: true,
+          initialVerifier: {
+            select: { id: true, discordId: true, discordTag: true, displayName: true },
+          },
+          finalVerifier: {
+            select: { id: true, discordId: true, discordTag: true, displayName: true },
+          },
+          ticket: {
+            include: {
+              openedBy: {
+                select: { discordId: true, discordTag: true, displayName: true },
+              },
+            },
+          },
         },
       });
 
-      return reply.send(verificationTicket);
+      return reply.send({
+        ...verificationTicket,
+        creatorUsername: verificationTicket.ticket.openedBy?.discordTag || null,
+        creatorDisplayName: verificationTicket.ticket.openedBy?.displayName || null,
+        creatorId: verificationTicket.ticket.openedBy?.discordId || null, // Keep for backward compatibility
+      });
     } catch (error) {
       if (error instanceof z.ZodError) {
         return reply.status(400).send({ error: 'Validation error', details: error.errors });

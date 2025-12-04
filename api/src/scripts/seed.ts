@@ -1,10 +1,21 @@
-import prisma from '../lib/prisma';
+import { Prisma } from "@prisma/client";
+import prisma from "../lib/prisma";
+
+// Helper function to convert RGB string to hex integer
+function rgbToHex(rgb: string): number | null {
+  const match = rgb.match(/\d+/g);
+  if (!match || match.length !== 3) return null;
+  const [r, g, b] = match.map(Number);
+  return (r << 16) | (g << 8) | b;
+}
 
 async function main(): Promise<void> {
-  console.log('🌱 Starting database seeding...');
+  console.log("🌱 Starting database seeding...");
 
-  // Clear existing data (optional - comment out if you want to keep existing data)
-  console.log('🧹 Cleaning existing data...');
+  // Clear existing data
+  console.log("🧹 Cleaning existing data...");
+  await prisma.ticketMemberParticipation.deleteMany();
+  await prisma.ticketStaffParticipation.deleteMany();
   await prisma.ticketMessage.deleteMany();
   await prisma.ticketLog.deleteMany();
   await prisma.ticketAssignment.deleteMany();
@@ -17,489 +28,417 @@ async function main(): Promise<void> {
   await prisma.ticket.deleteMany();
   await prisma.memberRecord.deleteMany();
 
-  // Create member records
-  console.log('👥 Creating member records...');
-  const members = await Promise.all([
-    prisma.memberRecord.create({
-      data: {
-        discordId: '123456789012345678',
-        discordTag: 'JohnDoe#1234',
-      },
-    }),
-    prisma.memberRecord.create({
-      data: {
-        discordId: '234567890123456789',
-        discordTag: 'JaneSmith#5678',
-      },
-    }),
-    prisma.memberRecord.create({
-      data: {
-        discordId: '345678901234567890',
-        discordTag: 'BobWilson#9012',
-      },
-    }),
-    prisma.memberRecord.create({
-      data: {
-        discordId: '456789012345678901',
-        discordTag: 'AliceBrown#3456',
-      },
-    }),
-    prisma.memberRecord.create({
-      data: {
-        discordId: '567890123456789012',
-        discordTag: 'CharlieDavis#7890',
-      },
-    }),
-  ]);
+  // Create staff members (moderators and helpers)
+  console.log("👥 Creating staff member records...");
 
-  // Create staff member
-  const staffMember = await prisma.memberRecord.create({
+  // Moderators
+  const solii = await prisma.memberRecord.create({
     data: {
-      discordId: '999999999999999999',
-      discordTag: 'StaffMember#0001',
+      discordId: "927391622885412905",
+      discordTag: "solii",
+      displayName: "Solii",
+      avatarUrl: "https://cdn.discordapp.com/avatars/927391622885412905/5f4a37d668e61f43c53c52d51d2d104d.webp?size=240",
+      bannerUrl: "https://cdn.discordapp.com/banners/927391622885412905/6109572c3d714273e89b39c9a92efd98.png?size=640",
+      accentColor: rgbToHex("33, 156, 218"),
     },
   });
 
-  // Create tickets
-  console.log('🎫 Creating tickets...');
-  const guildId = '987654321098765432';
-  const tickets = await Promise.all([
-    prisma.ticket.create({
+  const alicen = await prisma.memberRecord.create({
+    data: {
+      discordId: "526335312448716800",
+      discordTag: "alicendromee",
+      displayName: "Alicen",
+      avatarUrl: "https://cdn.discordapp.com/avatars/526335312448716800/c2f5bbe43ebe0fef305e5721ed8e3a8f.webp?size=240",
+      accentColor: rgbToHex("73, 159, 231"),
+    },
+  });
+
+  const lvna = await prisma.memberRecord.create({
+    data: {
+      discordId: "151885154405580810",
+      discordTag: "lvna",
+      displayName: "DJ Lvna",
+      avatarUrl: "https://cdn.discordapp.com/avatars/151885154405580810/1e4f2c003bbb1fdad192b564a20204d6.webp?size=128",
+      bannerUrl: "https://cdn.discordapp.com/banners/151885154405580810/86e41a139e9977e6540aa82714298296.png?size=1024",
+      accentColor: rgbToHex("0, 0, 0"),
+    },
+  });
+
+  const kinetic = await prisma.memberRecord.create({
+    data: {
+      discordId: "184687352394809345",
+      discordTag: "cdkinetic",
+      displayName: "Kinetic",
+      avatarUrl:
+        "https://cdn.discordapp.com/guilds/734595073920204940/users/184687352394809345/avatars/d077432683b6b0268b5f4f29eb935e64.webp?size=240",
+      bannerUrl:
+        "https://cdn.discordapp.com/guilds/734595073920204940/users/184687352394809345/banners/4146ca27bb20b4514b6db3bd27c16253.png?size=480",
+      accentColor: rgbToHex("13, 145, 209"),
+    },
+  });
+
+  const echo = await prisma.memberRecord.create({
+    data: {
+      discordId: "237309118761795584",
+      discordTag: "echo1108",
+      displayName: "Echo",
+      avatarUrl:
+        "https://cdn.discordapp.com/guilds/734595073920204940/users/237309118761795584/avatars/cfb9aecbcbe0c87f1f14a8f2637b6727.webp?size=240",
+      bannerUrl: "https://cdn.discordapp.com/banners/237309118761795584/4bd35320a982e1f9ad0411306d19625c.png?size=640",
+      accentColor: rgbToHex("162, 120, 133"),
+    },
+  });
+
+  const krenki = await prisma.memberRecord.create({
+    data: {
+      discordId: "269539285559017483",
+      discordTag: "krenki",
+      displayName: "Krenki",
+      avatarUrl: "https://cdn.discordapp.com/avatars/269539285559017483/77e84989c5f8dce43fad6e638e2886d8.webp?size=128",
+      bannerUrl: "https://cdn.discordapp.com/banners/269539285559017483/8a350099803d38b447ee5ae97e919093.png?size=1024",
+      accentColor: rgbToHex("192, 28, 30"),
+    },
+  });
+
+  // Helpers
+  const iris = await prisma.memberRecord.create({
+    data: {
+      discordId: "1091878045331247144",
+      discordTag: "irissu_",
+      displayName: "Iris",
+      avatarUrl: "https://cdn.discordapp.com/avatars/1091878045331247144/a_f079e3e1e46e2ba8a715a0207d9f1a8b.webp?size=240",
+      bannerUrl: "https://cdn.discordapp.com/banners/1091878045331247144/a_2e7299e3d2d17380a391eaa09b9a15f1.png?size=640",
+      accentColor: rgbToHex("78, 46, 167"),
+    },
+  });
+
+  const nutsuki = await prisma.memberRecord.create({
+    data: {
+      discordId: "148610617899614208",
+      discordTag: "princemonty",
+      displayName: "Nutsuki",
+      avatarUrl: "https://cdn.discordapp.com/avatars/148610617899614208/7fdccbfc6cedad88205c97f048f3589e.webp?size=240",
+      bannerUrl: "https://cdn.discordapp.com/banners/148610617899614208/cc635821e419a49b87f87e2fe0b9d106.png?size=640",
+      accentColor: rgbToHex("217, 82, 235"),
+    },
+  });
+
+  const clonefan = await prisma.memberRecord.create({
+    data: {
+      discordId: "785360147244384276",
+      discordTag: "clonefan00",
+      displayName: "Clone-Zone",
+      avatarUrl: "https://cdn.discordapp.com/avatars/785360147244384276/2d4435216c1a94a84f51cdff39128095.webp?size=240",
+      accentColor: rgbToHex("255, 0, 0"),
+    },
+  });
+
+  // Create regular members
+  console.log("👥 Creating regular member records...");
+  const member1 = await prisma.memberRecord.create({
+    data: {
+      discordId: "123456789012345678",
+      discordTag: "JohnDoe#1234",
+      displayName: "JohnDoe",
+    },
+  });
+  const member2 = await prisma.memberRecord.create({
+    data: {
+      discordId: "234567890123456789",
+      discordTag: "JaneSmith#5678",
+      displayName: "JaneSmith",
+    },
+  });
+  const member3 = await prisma.memberRecord.create({
+    data: {
+      discordId: "345678901234567890",
+      discordTag: "BobWilson#9012",
+      displayName: "BobWilson",
+    },
+  });
+  const member4 = await prisma.memberRecord.create({
+    data: {
+      discordId: "456789012345678901",
+      discordTag: "AliceBrown#3456",
+      displayName: "AliceBrown",
+    },
+  });
+  const member5 = await prisma.memberRecord.create({
+    data: {
+      discordId: "567890123456789012",
+      discordTag: "CharlieDavis#7890",
+      displayName: "CharlieDavis",
+    },
+  });
+
+  // Add Maxiee (user's real account)
+  const maxiee = await prisma.memberRecord.create({
+    data: {
+      discordId: "229734830932361216",
+      discordTag: "lolmaxz",
+      displayName: "Maxiee",
+      avatarUrl: "https://cdn.discordapp.com/avatars/229734830932361216/c42c89ae2ca247b8db4c4b11ad8ea047.webp?size=80",
+      bannerUrl: "https://cdn.discordapp.com/banners/229734830932361216/c656067034245a85dd6b6828a302b75b.png?size=300",
+      accentColor: 0x9549a7,
+    },
+  });
+
+  // Staff members (moderators + helpers + Maxiee as admin/moderator)
+  const staffMembers = [solii, alicen, lvna, kinetic, echo, krenki, iris, nutsuki, clonefan, maxiee];
+
+  // Regular members (do not treat Maxiee as a regular member)
+  const members = [member1, member2, member3, member4, member5];
+
+  // Create tickets with more variety
+  console.log("🎫 Creating tickets...");
+  const guildId = "734595073920204940";
+  const tickets = [];
+
+  // Create multiple tickets for better analytics
+  for (let i = 0; i < 30; i++) {
+    const ticketTypes = ["VERIFICATION_ID", "STAFF_TALK", "EVENT_REPORT", "UNSOLICITED_DM", "FRIEND_REQUEST", "DRAMA", "OTHER"] as const;
+    const statuses = ["OPEN", "IN_PROGRESS", "AWAITING_RESPONSE", "CLOSED"] as const;
+    const randomMember = members[Math.floor(Math.random() * members.length)];
+    const randomStaff = staffMembers[Math.floor(Math.random() * staffMembers.length)];
+    const randomType = ticketTypes[Math.floor(Math.random() * ticketTypes.length)];
+    const randomStatus = statuses[Math.floor(Math.random() * statuses.length)];
+
+    const createdAt = new Date();
+    createdAt.setDate(createdAt.getDate() - Math.floor(Math.random() * 30));
+
+    const ticket = await prisma.ticket.create({
       data: {
-        ticketNumber: 1,
-        discordId: 'ticket-001',
+        ticketThreadId: `ticket-${String(i + 1).padStart(3, "0")}`,
         guildId: guildId,
-        type: 'VERIFICATION_ID',
-        status: 'OPEN',
-        title: 'ID Verification Request',
-        creatorId: members[0].discordId,
-        memberId: members[0].id,
-        assignedStaffId: staffMember.discordId,
+        type: randomType,
+        status: randomStatus,
+        title: `Ticket ${i + 1}: ${randomType.replace("_", " ")}`,
+        openedById: randomMember.id, // MemberRecord ID
+        createdAt: createdAt,
+        closedAt: randomStatus === "CLOSED" ? new Date(createdAt.getTime() + Math.random() * 7 * 24 * 60 * 60 * 1000) : null,
+        closedBy: randomStatus === "CLOSED" ? randomStaff.discordId : null,
+        closeReason: randomStatus === "CLOSED" ? "Resolved successfully" : null,
       },
-    }),
-    prisma.ticket.create({
-      data: {
-        ticketNumber: 2,
-        discordId: 'ticket-002',
-        guildId: guildId,
-        type: 'STAFF_TALK',
-        status: 'IN_PROGRESS',
-        title: 'Need to discuss moderation policy',
-        creatorId: members[1].discordId,
-        memberId: members[1].id,
-        assignedStaffId: staffMember.discordId,
-      },
-    }),
-    prisma.ticket.create({
-      data: {
-        ticketNumber: 3,
-        discordId: 'ticket-003',
-        guildId: guildId,
-        type: 'EVENT_REPORT',
-        status: 'AWAITING_RESPONSE',
-        title: 'Weekly event report - March 2024',
-        creatorId: members[2].discordId,
-        memberId: members[2].id,
-      },
-    }),
-    prisma.ticket.create({
-      data: {
-        ticketNumber: 4,
-        discordId: 'ticket-004',
-        guildId: guildId,
-        type: 'UNSOLICITED_DM',
-        status: 'CLOSED',
-        title: 'Received unsolicited DM from user',
-        creatorId: members[3].discordId,
-        memberId: '111111111111111111',
-        assignedStaffId: staffMember.discordId,
-        closedAt: new Date('2024-11-10'),
-        closedBy: staffMember.discordId,
-        closeReason: 'User was warned and issue resolved. No further action needed.',
-      },
-    }),
-    prisma.ticket.create({
-      data: {
-        ticketNumber: 5,
-        discordId: 'ticket-005',
-        guildId: guildId,
-        type: 'FRIEND_REQUEST',
-        status: 'OPEN',
-        title: 'Friend request from unknown user',
-        creatorId: members[4].discordId,
-        memberId: members[4].id,
-      },
-    }),
-    prisma.ticket.create({
-      data: {
-        ticketNumber: 6,
-        discordId: 'ticket-006',
-        guildId: guildId,
-        type: 'DRAMA',
-        status: 'IN_PROGRESS',
-        title: 'Community drama report',
-        creatorId: members[0].discordId,
-        memberId: members[1].id,
-        assignedStaffId: staffMember.discordId,
-      },
-    }),
-    prisma.ticket.create({
-      data: {
-        ticketNumber: 7,
-        discordId: 'ticket-007',
-        guildId: guildId,
-        type: 'OTHER',
-        status: 'OPEN',
-        title: 'General inquiry about server rules',
-        creatorId: members[2].discordId,
-        memberId: members[2].id,
-      },
-    }),
-    prisma.ticket.create({
-      data: {
-        ticketNumber: 8,
-        discordId: 'ticket-008',
-        guildId: guildId,
-        type: 'VERIFICATION_ID',
-        status: 'CLOSED',
-        title: 'ID Verification - Completed',
-        creatorId: members[3].discordId,
-        memberId: members[3].id,
-        assignedStaffId: staffMember.discordId,
-        closedAt: new Date('2024-11-15'),
-        closedBy: staffMember.discordId,
-        closeReason: 'ID verification successful. All documents verified and member approved.',
-      },
-    }),
-  ]);
+    });
+    tickets.push(ticket);
+
+    // Create assignments for non-open tickets
+    if (randomStatus !== "OPEN") {
+      await prisma.ticketAssignment.create({
+        data: {
+          ticketId: ticket.id,
+          staffId: randomStaff.discordId,
+          assignedAt: createdAt,
+        },
+      });
+    }
+  }
 
   // Create verification tickets
-  console.log('🆔 Creating verification tickets...');
-  await Promise.all([
-    prisma.verificationTicket.create({
-      data: {
-        ticketId: tickets[0].id,
-        verificationType: 'ID',
-        initialVerifierId: staffMember.discordId,
-        idReceivedAt: new Date('2024-11-16'),
-        initialVerifiedAt: new Date('2024-11-17'),
-        reminderCount: 1,
-        lastReminderAt: new Date('2024-11-16'),
-      },
-    }),
-    prisma.verificationTicket.create({
-      data: {
-        ticketId: tickets[7].id,
-        verificationType: 'ID',
-        initialVerifierId: staffMember.discordId,
-        finalVerifierId: staffMember.discordId,
-        idReceivedAt: new Date('2024-11-10'),
-        initialVerifiedAt: new Date('2024-11-11'),
-        finalVerifiedAt: new Date('2024-11-12'),
-        reminderCount: 0,
-      },
-    }),
-  ]);
+  console.log("🆔 Creating verification tickets...");
+  const verificationTickets = tickets.filter((t) => t.type === "VERIFICATION_ID");
 
-  // Create event report tickets
-  console.log('📅 Creating event report tickets...');
-  await prisma.eventReportTicket.create({
-    data: {
-      ticketId: tickets[2].id,
-      eventName: 'Community Game Night',
-      eventDate: new Date('2024-11-20'),
-      eventHostId: members[2].discordId,
-      reportedUserId: members[0].discordId,
-      incidentType: 'Inappropriate behavior during event',
-    },
-  });
+  for (const ticket of verificationTickets) {
+    const initialVerifier = staffMembers[Math.floor(Math.random() * staffMembers.length)];
+    const finalVerifier = Math.random() > 0.5 ? staffMembers[Math.floor(Math.random() * staffMembers.length)] : null;
 
-  // Create staff talk tickets
-  console.log('💬 Creating staff talk tickets...');
-  await prisma.staffTalkTicket.create({
-    data: {
-      ticketId: tickets[1].id,
-      purpose: 'investigation',
-      targetMemberId: members[1].discordId,
-    },
-  });
+    try {
+      await prisma.verificationTicket.create({
+        data: {
+          ticketId: ticket.id,
+          initialVerifierId: initialVerifier.id, // MemberRecord ID
+          finalVerifierId: finalVerifier?.id || null, // MemberRecord ID
+          idReceivedAt: ticket.createdAt,
+          initialVerifiedAt: new Date(ticket.createdAt.getTime() + 24 * 60 * 60 * 1000),
+          finalVerifiedAt: finalVerifier ? new Date(ticket.createdAt.getTime() + 2 * 24 * 60 * 60 * 1000) : null,
+          reminderCount: Math.floor(Math.random() * 3),
+        },
+      });
+    } catch (error: unknown) {
+      // Skip if verification ticket already exists for this ticket
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        console.log(`   Skipping duplicate verification ticket for ticket ${ticket.id}`);
+        continue;
+      }
+      throw error;
+    }
+  }
 
-  // Create ticket messages
-  console.log('💬 Creating ticket messages...');
-  await Promise.all([
-    prisma.ticketMessage.create({
-      data: {
-        ticketId: tickets[0].id,
-        authorId: members[0].discordId,
-        content: 'Hello, I would like to verify my ID. Here is my information.',
-        messageId: 'msg-001',
-        attachments: [] as never,
-        createdAt: new Date('2024-11-16T10:00:00'),
-      },
-    }),
-    prisma.ticketMessage.create({
-      data: {
-        ticketId: tickets[0].id,
-        authorId: staffMember.discordId,
-        content: 'Thank you for submitting. We will review your information shortly.',
-        messageId: 'msg-002',
-        attachments: [] as never,
-        createdAt: new Date('2024-11-16T10:05:00'),
-      },
-    }),
-    prisma.ticketMessage.create({
-      data: {
-        ticketId: tickets[1].id,
-        authorId: members[1].discordId,
-        content: 'I need to discuss the new moderation policy with the team.',
-        messageId: 'msg-003',
-        attachments: [] as never,
-        createdAt: new Date('2024-11-17T14:00:00'),
-      },
-    }),
-  ]);
+  // Create warnings and moderation actions
+  console.log("⚠️ Creating warnings and moderation actions...");
+  // Base set of mixed warning types
+  for (let i = 0; i < 15; i++) {
+    const randomMember = members[Math.floor(Math.random() * members.length)];
+    const randomStaff = staffMembers[Math.floor(Math.random() * staffMembers.length)];
+    const warningTypes = ["WARNING", "INFORMAL_WARNING", "WATCHLIST", "BANNED"] as const;
+    const randomType = warningTypes[Math.floor(Math.random() * warningTypes.length)];
 
-  // Create ticket logs
-  console.log('📝 Creating ticket logs...');
-  await Promise.all([
-    prisma.ticketLog.create({
-      data: {
-        ticketId: tickets[0].id,
-        action: 'TICKET_CREATED',
-        staffId: members[0].discordId,
-        details: { note: 'Ticket created by user' } as never,
-      },
-    }),
-    prisma.ticketLog.create({
-      data: {
-        ticketId: tickets[0].id,
-        action: 'TICKET_ASSIGNED',
-        staffId: staffMember.discordId,
-        details: { assignedTo: staffMember.discordId } as never,
-      },
-    }),
-    prisma.ticketLog.create({
-      data: {
-        ticketId: tickets[4].id,
-        action: 'STATUS_CHANGED',
-        staffId: staffMember.discordId,
-        details: { oldStatus: 'OPEN', newStatus: 'IN_PROGRESS' } as never,
-      },
-    }),
-  ]);
+    const when = new Date();
+    when.setDate(when.getDate() - Math.floor(Math.random() * 60));
 
-  // Create ticket assignments
-  console.log('👤 Creating ticket assignments...');
-  await Promise.all([
-    prisma.ticketAssignment.create({
+    const warning = await prisma.warning.create({
       data: {
-        ticketId: tickets[0].id,
-        staffId: staffMember.discordId,
-        assignedAt: new Date('2024-11-16'),
+        memberId: randomMember.id,
+        type: randomType,
+        why: `Reason for ${randomType.toLowerCase()}`,
+        result: "Action taken",
+        when: when,
+        loggedBy: randomStaff.discordId,
+        isActive: randomType !== "BANNED",
+        evidenceUrls: [] as never,
       },
-    }),
-    prisma.ticketAssignment.create({
-      data: {
-        ticketId: tickets[1].id,
-        staffId: staffMember.discordId,
-        assignedAt: new Date('2024-11-17'),
-      },
-    }),
-    prisma.ticketAssignment.create({
-      data: {
-        ticketId: tickets[3].id,
-        staffId: staffMember.discordId,
-        assignedAt: new Date('2024-11-10'),
-        unassignedAt: new Date('2024-11-10'),
-      },
-    }),
-  ]);
+    });
 
-  // Create warnings
-  console.log('⚠️ Creating warnings...');
-  const warnings = await Promise.all([
-    prisma.warning.create({
+    // Create corresponding moderation action
+    const actionTypes = {
+      WARNING: "WARNING_ISSUED",
+      INFORMAL_WARNING: "INFORMAL_WARNING_ISSUED",
+      WATCHLIST: "WATCHLIST_ADDED",
+      BANNED: "BAN",
+    } as const;
+
+    await prisma.moderationAction.create({
       data: {
-        memberId: members[0].id,
-        type: 'WARNING',
-        why: 'Inappropriate behavior in general chat',
-        result: 'User warned and reminded of server rules',
-        when: new Date('2024-11-01'),
-        loggedBy: staffMember.discordId,
-        isActive: true,
-        evidenceUrls: ['https://example.com/evidence1.png'] as never,
+        memberId: randomMember.id,
+        staffId: randomStaff.discordId,
+        actionType: actionTypes[randomType],
+        reason: warning.why,
+        when: when,
+        isActive: warning.isActive,
+        evidenceUrls: [] as never,
+        warningId: warning.id,
       },
-    }),
-    prisma.warning.create({
+    });
+  }
+
+  // Additional informal warnings and watchlist entries to better populate moderation logs
+  console.log("⚠️ Creating extra informal warnings and watchlist entries...");
+  for (let i = 0; i < 20; i++) {
+    const randomMember = members[Math.floor(Math.random() * members.length)];
+    const randomStaff = staffMembers[Math.floor(Math.random() * staffMembers.length)];
+    const warningTypes = ["INFORMAL_WARNING", "INFORMAL_WARNING", "WATCHLIST"] as const;
+    const randomType = warningTypes[Math.floor(Math.random() * warningTypes.length)];
+
+    const when = new Date();
+    when.setDate(when.getDate() - Math.floor(Math.random() * 60));
+
+    const warning = await prisma.warning.create({
       data: {
-        memberId: members[1].id,
-        type: 'INFORMAL_WARNING',
-        why: 'Minor rule violation',
-        result: 'Informal warning issued',
-        when: new Date('2024-11-05'),
-        loggedBy: staffMember.discordId,
+        memberId: randomMember.id,
+        type: randomType,
+        why: `Reason for ${randomType.toLowerCase()}`,
+        result: "Action taken",
+        when: when,
+        loggedBy: randomStaff.discordId,
         isActive: true,
         evidenceUrls: [] as never,
       },
-    }),
-    prisma.warning.create({
-      data: {
-        memberId: members[2].id,
-        type: 'WATCHLIST',
-        why: 'Pattern of concerning behavior',
-        result: 'Added to watchlist for monitoring',
-        when: new Date('2024-10-20'),
-        loggedBy: staffMember.discordId,
-        isActive: true,
-        evidenceUrls: ['https://example.com/evidence2.png', 'https://example.com/evidence3.png'] as never,
-      },
-    }),
-    prisma.warning.create({
-      data: {
-        memberId: members[0].id,
-        type: 'BANNED',
-        why: 'Repeated violations after warnings',
-        result: 'User banned from server',
-        when: new Date('2024-11-10'),
-        loggedBy: staffMember.discordId,
-        isActive: false,
-        evidenceUrls: [] as never,
-      },
-    }),
-  ]);
+    });
 
-  // Create moderation actions
-  console.log('🛡️ Creating moderation actions...');
-  await Promise.all([
-    prisma.moderationAction.create({
+    const actionTypes = {
+      INFORMAL_WARNING: "INFORMAL_WARNING_ISSUED",
+      WATCHLIST: "WATCHLIST_ADDED",
+    } as const;
+
+    await prisma.moderationAction.create({
       data: {
-        memberId: members[0].discordId, // Use Discord ID, not database ID
-        staffId: staffMember.discordId,
-        actionType: 'WARNING_ISSUED',
-        reason: 'Inappropriate behavior',
-        when: new Date('2024-11-01'),
-        isActive: true,
-        evidenceUrls: ['https://example.com/mod-evidence1.png'] as never,
-        warningId: warnings[0].id, // Link to the first warning
+        memberId: randomMember.id,
+        staffId: randomStaff.discordId,
+        actionType: actionTypes[randomType],
+        reason: warning.why,
+        when: when,
+        isActive: warning.isActive,
+        evidenceUrls: [] as never,
+        warningId: warning.id,
       },
-    }),
-    prisma.moderationAction.create({
+    });
+  }
+
+  // Create additional kicks and bans
+  console.log("👢 Creating additional kicks and bans...");
+  const moderators = [solii, alicen, lvna, kinetic, echo, krenki]; // Only moderators can kick/ban
+
+  for (let i = 0; i < 20; i++) {
+    const randomMember = members[Math.floor(Math.random() * members.length)];
+    const randomModerator = moderators[Math.floor(Math.random() * moderators.length)];
+    const actionType = Math.random() > 0.5 ? "KICK" : "BAN";
+
+    const when = new Date();
+    when.setDate(when.getDate() - Math.floor(Math.random() * 90));
+
+    await prisma.moderationAction.create({
       data: {
-        memberId: members[1].discordId, // Use Discord ID, not database ID
-        staffId: staffMember.discordId,
-        actionType: 'TIMEOUT',
-        reason: 'Spam in multiple channels',
-        when: new Date('2024-11-08'),
-        duration: '7 days',
-        isActive: true,
+        memberId: randomMember.id,
+        staffId: randomModerator.discordId,
+        actionType: actionType,
+        reason: `Reason for ${actionType.toLowerCase()}`,
+        when: when,
+        duration: actionType === "BAN" ? `${Math.floor(Math.random() * 12) + 1} months` : null,
+        isActive: actionType === "BAN" ? Math.random() > 0.3 : false, // Most bans are active
         evidenceUrls: [] as never,
       },
-    }),
-    prisma.moderationAction.create({
+    });
+  }
+
+  // Create timeout moderation actions
+  console.log("⏱ Creating timeout moderation actions...");
+  for (let i = 0; i < 20; i++) {
+    const randomMember = members[Math.floor(Math.random() * members.length)];
+    const randomModerator = moderators[Math.floor(Math.random() * moderators.length)];
+
+    const when = new Date();
+    when.setDate(when.getDate() - Math.floor(Math.random() * 60));
+
+    await prisma.moderationAction.create({
       data: {
-        memberId: members[2].discordId, // Use Discord ID, not database ID
-        staffId: staffMember.discordId,
-        actionType: 'KICK',
-        reason: 'Violation of server rules',
-        when: new Date('2024-10-25'),
-        isActive: false,
-        evidenceUrls: ['https://example.com/mod-evidence2.png'] as never,
-      },
-    }),
-    prisma.moderationAction.create({
-      data: {
-        memberId: members[0].discordId, // Use Discord ID, not database ID
-        staffId: staffMember.discordId,
-        actionType: 'BAN',
-        reason: 'Repeated violations',
-        when: new Date('2024-11-10'),
-        duration: 'Permanent',
-        isActive: true,
-        evidenceUrls: [] as never,
-        warningId: warnings[3].id, // Link to the banned warning
-      },
-    }),
-    prisma.moderationAction.create({
-      data: {
-        memberId: members[3].discordId, // Use Discord ID, not database ID
-        staffId: staffMember.discordId,
-        actionType: 'VERIFICATION_GRANTED',
-        reason: 'ID verification successful',
-        when: new Date('2024-11-12'),
-        isActive: true,
+        memberId: randomMember.id,
+        staffId: randomModerator.discordId,
+        actionType: "TIMEOUT",
+        reason: "Timeout for testing",
+        when: when,
+        duration: `${Math.floor(Math.random() * 72) + 1} hours`,
+        isActive: Math.random() > 0.4,
         evidenceUrls: [] as never,
       },
-    }),
-    prisma.moderationAction.create({
-      data: {
-        memberId: members[4].discordId, // Use Discord ID, not database ID
-        staffId: staffMember.discordId,
-        actionType: 'WATCHLIST_ADDED',
-        reason: 'Monitoring for potential issues',
-        when: new Date('2024-11-14'),
-        isActive: true,
-        evidenceUrls: [] as never,
-      },
-    }),
-  ]);
+    });
+  }
 
   // Create mod on call records
-  console.log('📞 Creating mod on call records...');
+  console.log("📞 Creating mod on call records...");
   const now = new Date();
-  const currentWeekStart = new Date(now);
-  currentWeekStart.setDate(now.getDate() - now.getDay()); // Start of current week (Sunday)
-  const currentWeekEnd = new Date(currentWeekStart);
-  currentWeekEnd.setDate(currentWeekStart.getDate() + 6);
+  for (let week = 0; week < 4; week++) {
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - (now.getDay() + week * 7));
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
 
-  const lastWeekStart = new Date(currentWeekStart);
-  lastWeekStart.setDate(currentWeekStart.getDate() - 7);
-  const lastWeekEnd = new Date(lastWeekStart);
-  lastWeekEnd.setDate(lastWeekStart.getDate() + 6);
-
-  await Promise.all([
-    prisma.modOnCall.create({
+    const randomStaff = staffMembers[Math.floor(Math.random() * staffMembers.length)];
+    await prisma.modOnCall.create({
       data: {
-        staffId: staffMember.discordId,
-        weekStart: currentWeekStart,
-        weekEnd: currentWeekEnd,
-        ticketsClosed: 5,
-        recordsLogged: 3,
-        isActive: true,
+        staffId: randomStaff.discordId,
+        weekStart: weekStart,
+        weekEnd: weekEnd,
+        ticketsClosed: Math.floor(Math.random() * 20) + 5,
+        recordsLogged: Math.floor(Math.random() * 15) + 3,
+        isActive: week === 0,
       },
-    }),
-    prisma.modOnCall.create({
-      data: {
-        staffId: staffMember.discordId,
-        weekStart: lastWeekStart,
-        weekEnd: lastWeekEnd,
-        ticketsClosed: 8,
-        recordsLogged: 5,
-        isActive: false,
-      },
-    }),
-  ]);
+    });
+  }
 
-  console.log('✅ Database seeding completed!');
-  console.log(`   - Created ${members.length + 1} member records`);
+  console.log("✅ Database seeding completed!");
+  console.log(`   - Created ${staffMembers.length} staff member records`);
+  console.log(`   - Created ${members.length} regular member records (including Maxiee)`);
   console.log(`   - Created ${tickets.length} tickets`);
-  console.log(`   - Created 2 verification tickets`);
-  console.log(`   - Created 1 event report ticket`);
-  console.log(`   - Created 1 staff talk ticket`);
-  console.log(`   - Created 3 ticket messages`);
-  console.log(`   - Created 3 ticket logs`);
-  console.log(`   - Created 3 ticket assignments`);
-  console.log(`   - Created 4 warnings`);
-  console.log(`   - Created 6 moderation actions`);
-  console.log(`   - Created 2 mod on call records`);
+  console.log(`   - Created verification tickets`);
+  console.log(`   - Created warnings and moderation actions`);
+  console.log(`   - Created mod on call records`);
 }
 
 main()
   .catch((e) => {
-    console.error('❌ Error seeding database:', e);
+    console.error("❌ Error seeding database:", e);
     process.exit(1);
   })
   .finally(async () => {
     await prisma.$disconnect();
   });
-
-

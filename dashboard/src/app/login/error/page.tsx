@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
-import { AlertCircle, ArrowLeft, Home } from 'lucide-react';
+import { AlertCircle, Home } from 'lucide-react';
 
 function LoginErrorContent(): JSX.Element {
   const searchParams = useSearchParams();
@@ -36,18 +36,11 @@ function LoginErrorContent(): JSX.Element {
 
           <div className="space-y-3">
             <Link
-              href="/login"
+              href="/"
               className="flex w-full items-center justify-center space-x-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-white shadow-lg transition-all hover:shadow-xl hover:scale-[1.02]"
             >
-              <ArrowLeft className="h-5 w-5" />
-              <span>Try Again</span>
-            </Link>
-            <Link
-              href="/dashboard"
-              className="flex w-full items-center justify-center space-x-2 rounded-xl border border-gray-300 bg-white px-6 py-3 text-gray-700 transition-colors hover:bg-gray-50"
-            >
               <Home className="h-5 w-5" />
-              <span>Go to Dashboard</span>
+              <span>Return to Home</span>
             </Link>
           </div>
         </div>
